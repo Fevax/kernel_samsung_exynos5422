@@ -64,6 +64,10 @@ void ssp_enable(struct ssp_data *data, bool enable)
 static irqreturn_t sensordata_irq_thread_fn(int iIrq, void *dev_id)
 {
 	struct ssp_data *data = dev_id;
+	struct timespec ts;
+
+	ts = ktime_to_timespec(ktime_get_boottime());
+	data->timestamp = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 
 #if defined SSP_IRQ_EDGE_PROTECT
 	if (prevent_irq != 0) {
@@ -93,6 +97,8 @@ static void initialize_variable(struct ssp_data *data)
 		data->batchLatencyBuf[iSensorIndex] = 0;
 		data->batchOptBuf[iSensorIndex] = 0;
 		data->aiCheckStatus[iSensorIndex] = INITIALIZATION_STATE;
+		data->lastTimestamp[iSensorIndex] = 0;
+		data->reportedData[iSensorIndex] = false;
 	}
 
 	atomic_set(&data->aSensorEnable, 0);
@@ -207,11 +213,11 @@ static int initialize_irq(struct ssp_data *data)
 	int iRet, iIrq;
 	iIrq = gpio_to_irq(data->mcu_int1);
 
-	pr_info("[SSP] requesting IRQ %d\n", iIrq);
+	pr_info("[SSP]: requesting IRQ %d\n", iIrq);
 	iRet = request_threaded_irq(iIrq, NULL, sensordata_irq_thread_fn,
 				    IRQF_TRIGGER_FALLING|IRQF_ONESHOT, "SSP_Int", data);
 	if (iRet < 0) {
-		pr_err("[SSP] %s, request_irq(%d) failed for gpio %d (%d)\n",
+		pr_err("[SSP]: %s - request_irq(%d) failed for gpio %d (%d)\n",
 		       __func__, iIrq, iIrq, iRet);
 		goto err_request_irq;
 	}
@@ -249,6 +255,15 @@ static int ssp_parse_dt(struct device *dev,struct  ssp_data *data)
 {
 	struct device_node *np = dev->of_node;
 	int errorno = 0;
+#if defined(CONFIG_SENSORS_SSP_YAS532)
+	u32 len, temp;
+	int i;
+#endif
+
+	if (!np) {
+		pr_err("[SSP] NO dt node!!\n");
+		return errorno;
+	}
 
 	data->mcu_int1 = of_get_named_gpio(np, "ssp-irq", 0);
 	if (data->mcu_int1 < 0) {
@@ -317,6 +332,27 @@ static int ssp_parse_dt(struct device *dev,struct  ssp_data *data)
 	if(!gpio_get_value(data->rst))
 		pr_err("[SSP] rst level was LOW at BL !!\n");
 	gpio_direction_output(data->rst, 1);
+
+#if defined(CONFIG_SENSORS_SSP_YAS532)
+	if (!of_get_property(np, "ssp-mag-array", &len)) {
+		pr_info("[SSP] No static matrix at DT for YAS532!(%p)\n", data->static_matrix);
+		goto dt_exit;
+	}
+	if (len/4 != 9) {
+		pr_err("[SSP] Length/4:%d should be 9 for YAS532!\n", len/4);
+		goto dt_exit;
+	}
+	data->static_matrix = kzalloc(9*sizeof(s16), GFP_KERNEL);
+	pr_info("[SSP] static matrix Length:%d, Len/4=%d\n", len, len/4);
+
+	for (i = 0; i < 9; i++) {
+		if (of_property_read_u32_index(np, "ssp-mag-array", i, &temp)) {
+			pr_err("[SSP] %s cannot get u32 of array[%d]!\n", __func__, i);
+			goto dt_exit;
+		}
+		*(data->static_matrix+i) = (int)temp;
+	}
+#endif
 
 dt_exit:
 	return errorno;

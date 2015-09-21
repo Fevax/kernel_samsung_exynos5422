@@ -505,7 +505,7 @@ include $(srctree)/arch/$(SRCARCH)/Makefile
 export KBUILD_DEFCONFIG KBUILD_KCONFIG
 
 config: scripts_basic outputmakefile FORCE
-	$(Q)mkdir -p include/linux include/config
+	$(Q)mkdir -p include/linux include/config	
 	$(Q)$(MAKE) $(build)=scripts/kconfig $@
 
 %config: scripts_basic outputmakefile FORCE
@@ -904,7 +904,6 @@ export INSTALL_FW_PATH
 PHONY += firmware_install
 firmware_install: FORCE
 	@mkdir -p $(objtree)/firmware
-	@mkdir -p $(objtree)/drivers/sensorhub/stm/factory
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.fwinst obj=firmware __fw_install
 
 # ---------------------------------------------------------------------------

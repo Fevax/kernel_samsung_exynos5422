@@ -2,6 +2,8 @@
 # Makefile for the kernel security code
 #
 
+$(shell mkdir -p $(objtree)/security/tima_uevent)
+
 obj-$(CONFIG_KEYS)			+= keys/
 subdir-$(CONFIG_SECURITY_SELINUX)	+= selinux
 subdir-$(CONFIG_SECURITY_SMACK)		+= smack
@@ -30,7 +32,7 @@ subdir-$(CONFIG_INTEGRITY)		+= integrity
 obj-$(CONFIG_INTEGRITY)			+= integrity/built-in.o
 
 # TIMA uevent 
-obj-$(CONFIG_TIMA_UEVENT)     += tima_uevent/tima_uevent.o
+obj-$(CONFIG_TIMA)     += tima_uevent/tima_uevent.o
 
 
 # Knox SDP

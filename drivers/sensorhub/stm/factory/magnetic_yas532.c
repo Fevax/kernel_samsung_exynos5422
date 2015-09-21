@@ -12,7 +12,7 @@
  *  GNU General Public License for more details.
  *
  */
-#include "ssp.h"
+#include "../ssp.h"
 #include "magnetic_yas532.h"
 
 /*************************************************************************/
@@ -166,7 +166,10 @@ int set_static_matrix(struct ssp_data *data)
 	msg->buffer = (char*) kzalloc(18, GFP_KERNEL);
 
 	msg->free_buffer = 1;
-	memcpy(msg->buffer, static_matrix, 18);
+	if (data->static_matrix == NULL)
+		memcpy(msg->buffer, static_matrix, 18);
+	else
+		memcpy(msg->buffer, data->static_matrix, 18);
 
 	iRet = ssp_spi_async(data, msg);
 
