@@ -1931,7 +1931,7 @@ int fimc_is_sensor_buffer_queue(struct fimc_is_device_sensor *device,
 		goto p_err;
 	}
 
-	framemgr = &device->vctx->q_dst->framemgr;
+	framemgr = &device->vctx->q_dst.framemgr;
 	if (framemgr == NULL) {
 		err("framemgr is null\n");
 		ret = EINVAL;
@@ -1980,7 +1980,7 @@ int fimc_is_sensor_buffer_finish(struct fimc_is_device_sensor *device,
 		goto exit;
 	}
 
-	framemgr = &device->vctx->q_dst->framemgr;
+	framemgr = &device->vctx->q_dst.framemgr;
 	frame = &framemgr->frame[index];
 
 	framemgr_e_barrier_irqs(framemgr, FMGR_IDX_3 + index, flags);

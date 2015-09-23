@@ -291,7 +291,11 @@ static int ashmem_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct ashmem_area *asma = file->private_data;
 	int ret = 0;
-
+#ifdef CONFIG_TIMA_RKP
+	if (vma->vm_end - vma->vm_start) {
+		cpu_v7_tima_iommu_opt(vma->vm_start, vma->vm_end, (unsigned long)vma->vm_mm->pgd);
+	}
+#endif
 	mutex_lock(&ashmem_mutex);
 
 	/* user needs to SET_SIZE before mapping */

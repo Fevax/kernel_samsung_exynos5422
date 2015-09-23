@@ -68,7 +68,6 @@ static void log_eol(uint16_t source)
 		log_line_len = 0;
 		return;
 	}
-
 	prev_eol = true;
 	/* MobiCore Userspace */
 	if (prev_source)

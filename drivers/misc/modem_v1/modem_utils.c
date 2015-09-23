@@ -537,33 +537,20 @@ exit:
 __be32 ipv4str_to_be32(const char *ipv4str, size_t count)
 {
 	unsigned char ip[4];
-	char *ipstr; /* == strlen("xxx.xxx.xxx.xxx") + 1 */
-	char *next;
+	char ipstr[16]; /* == strlen("xxx.xxx.xxx.xxx") + 1 */
+	char *next = ipstr;
 	int i;
-	int size;
 
-	if (!ipv4str)
-		return 0;
-
-	if ((size = strlen(ipv4str)) > 16)
-		return 0;
-
-	ipstr = kzalloc(size, GFP_ATOMIC);
-	next = ipstr;
-
-	strncpy(ipstr, ipv4str, size);
+	strncpy(ipstr, ipv4str, ARRAY_SIZE(ipstr));
 
 	for (i = 0; i < 4; i++) {
 		char *p;
 
 		p = strsep(&next, ".");
-		if (kstrtou8(p, 10, &ip[i]) < 0) {
-			kfree(ipstr);
+		if (kstrtou8(p, 10, &ip[i]) < 0)
 			return 0; /* == 0.0.0.0 */
-		}
 	}
 
-	kfree(ipstr);
 	return *((__be32 *)ip);
 }
 

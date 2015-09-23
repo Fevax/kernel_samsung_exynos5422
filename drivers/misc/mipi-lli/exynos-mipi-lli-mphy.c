@@ -22,12 +22,17 @@
 #include "exynos-mipi-lli-mphy.h"
 
 struct device *lli_mphy;
+int e1_patch;
 
 int exynos_mphy_init(struct exynos_mphy *phy)
 {
 	int gear = phy->default_mode & 0x7;
 
-	writel(0x45, phy->loc_regs + PHY_TX_HS_SYNC_LENGTH(0));
+	if (e1_patch)
+		writel(0x43, phy->loc_regs + PHY_TX_HS_SYNC_LENGTH(0));
+	else
+		writel(0x45, phy->loc_regs + PHY_TX_HS_SYNC_LENGTH(0));
+
 	/* if TX_LCC is disable, M-TX should enter SLEEP or STALL state
 	based on the current value of the TX_MODE upon getting a TOB REQ */
 	writel(0x0, phy->loc_regs + PHY_TX_LCC_ENABLE(0));
@@ -60,24 +65,24 @@ int exynos_mphy_cmn_init(struct exynos_mphy *phy)
 		writel(0xF9, phy->loc_regs + (0x4f*4));
 
 	/* Basic tune for series-A */
-#if defined(CONFIG_SOC_EXYNOS5433) && defined(CONFIG_UMTS_MODEM_SS333)
-	writel(0x06, phy->loc_regs + (0x0A*4));
-#else
- 	writel(0x05, phy->loc_regs + (0x0A*4));
-#endif
+	writel(0x05, phy->loc_regs + (0x0A*4));
 	writel(0x03, phy->loc_regs + (0x11*4));
 	writel(0x03, phy->loc_regs + (0x12*4));
 	writel(0x03, phy->loc_regs + (0x13*4));
-	writel(0x02, phy->loc_regs + (0x14*4));
+	if (e1_patch) 
+		writel(0x01, phy->loc_regs + (0x14*4));
+	else 
+		writel(0x02, phy->loc_regs + (0x14*4));
 	writel(0x00, phy->loc_regs + (0x16*4));
-	writel(0xD6, phy->loc_regs + (0x19*4));
-	writel(0x00, phy->loc_regs + (0x44*4));
+	writel(0x01, phy->loc_regs + (0x17*4));
+	writel(0x96, phy->loc_regs + (0x19*4));
+	writel(0x07, phy->loc_regs + (0x44*4));
 	writel(0x01, phy->loc_regs + (0x4D*4));
 	writel(0x03, phy->loc_regs + (0x4E*4));
 
 	/* afc on only booting time */
 	if (is_first) {
-		writel(0x00, phy->loc_regs + (0x44*4));
+		writel(0x07, phy->loc_regs + (0x44*4));
 		writel(0x00, phy->loc_regs + (0x31*4));
 		is_first = false;
 	}
@@ -143,9 +148,7 @@ int exynos_mphy_ovtm_init(struct exynos_mphy *phy)
 	}
 
 	/* PLL power off */
-#ifdef CONFIG_SOC_EXYNOS5430
 	writel(0x0, phy->loc_regs + (0x1A*4));
-#endif
 
 	return 0;
 }
@@ -210,13 +213,20 @@ static int exynos_mipi_lli_mphy_get_setting(struct exynos_mphy *phy)
 	else
 		phy->is_shared_clk = true;
 
+	prop = of_get_property(modem_node, "e1-patch", NULL);
+	if (prop)
+		e1_patch = be32_to_cpup(prop);
+	else
+		e1_patch = 0;
+
 parsing_err:
-	dev_err(phy->dev, "modem_name:%s, gear:%s-G%d%s, shdclk:%d\n",
+	dev_err(phy->dev, "modem_name:%s, gear:%s-G%d%s, shdclk:%d, e1-patch:%d\n",
 			modem_name,
 			phy->default_mode & OPMODE_HS ? "HS" : "PWM",
 			phy->default_mode & 0x7,
 			phy->default_mode & HS_RATE_B ? "B" : "A",
-			phy->is_shared_clk);
+			phy->is_shared_clk,
+			e1_patch);
 	return 0;
 }
 

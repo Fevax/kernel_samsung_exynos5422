@@ -80,6 +80,7 @@ config SOC_EXYNOS5422
 	select S5P_PM if PM
 	select S5P_SLEEP if SUSPEND
 	select SAMSUNG_DMADEV
+	select EXYNOS_RUN_QUEUE_STATS
 	help
 	  Enable EXYNOS5422 SoC support
 
@@ -806,23 +807,12 @@ config TIMA_RKP
 	depends on TIMA
 	default n
 
-config HYP_RKP
-	bool "Enable Hypervisor RKP"
-	depends on TIMA_RKP
-	default n
-
 config TIMA_RKP_30
 	bool "Enable RKP (Realtime Kernel Protection) TIMA 3.0 feature"
 	depends on TIMA_RKP
 	default y
 	help
 		TIMA RKP 30 features, including kernel fault fixup and optimized tima_pg_is_protected
-
-config KNOX_KAP
-       bool "Enable KNOX KAP mode"
-       default n
-       help 
-              Knox Active Protection mode
 
 config TIMA_RKP_L1_TABLES
 	bool
@@ -879,29 +869,6 @@ config TIMA_RKP_DEBUG
 	default n
 	help
 	  not workable in  K3G right now, no code ported in for this part.TIMA debug infrastructure.
-
-config TIMA_RKP_KDATA_PROT
-	bool "Protection for kernel data"
-	depends on TIMA_RKP_30
-	depends on TIMA_RKP_L2_TABLES
-	default n
-	help
-		Detects double mapping of kernel data.
-
-config TIMA_RKP_RO_CRED
-	bool "Protection for cred structure"
-	depends on TIMA_RKP_30
-	depends on TIMA_RKP_L2_TABLES
-	default n
-	help
-		Prevents unauthorized cred modification.
-
-config TIMA_LKMAUTH_CODE_PROT
-	bool "Support Kernel Module"
-	depends on MODULES
-	default n
-	help
-	  Support Kernel Module
 
 config TIMA_TEST_INFRA
 	tristate "Testing infrastructure for TIMA"

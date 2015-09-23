@@ -246,9 +246,7 @@ static void _ptrack_set(struct ptrack *p, unsigned long addr)
 		p->addrs[i] = 0;
 #endif
 	p->addr = addr;
-	preempt_disable();
 	p->cpu = smp_processor_id();
-	preempt_enable();
 	p->pid = current->pid;
 	p->when = cpu_clock(0);
 }
@@ -1513,17 +1511,6 @@ void free_hot_cold_page(struct page *page, int cold)
 	struct per_cpu_pages *pcp;
 	unsigned long flags;
 	int migratetype;
-
-#ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
-	/*
-	   struct scfs_sb_info *sbi;
-
-	   if (PageScfslower(page) || PageNocache(page)) {
-	   sbi = SCFS_S(page->mapping->host->i_sb);
-	   sbi->scfs_lowerpage_reclaim_count++;
-	   }
-	 */
-#endif
 
 	if (!free_pages_prepare(page, 0))
 		return;
@@ -2844,7 +2831,7 @@ __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 	bool deferred_compaction = false;
 	bool contended_compaction = false;
 #if defined(CONFIG_SEC_OOM_KILLER) || defined(CONFIG_OOM_KILLER_TIMEOUT)
-	unsigned long oom_invoke_timeout = jiffies + HZ/50;
+	unsigned long oom_invoke_timeout = jiffies + HZ/4;
 #endif
 
 #ifdef CONFIG_SEC_SLOWPATH
@@ -3020,7 +3007,7 @@ rebalance:
 			}
 
 #if defined(CONFIG_SEC_OOM_KILLER) || defined(CONFIG_OOM_KILLER_TIMEOUT)
-			oom_invoke_timeout = jiffies + HZ/25;
+			oom_invoke_timeout = jiffies + HZ/4;
 #endif
 			goto restart;
 		}
@@ -6742,10 +6729,6 @@ static const struct trace_print_flags pageflag_names[] = {
 #endif
 #ifdef CONFIG_SDP
 	{1UL << PG_sensitive,	"sensitive"	},
-#endif
-#ifdef CONFIG_SCFS_LOWER_PAGECACHE_INVALIDATION
-	{1UL << PG_scfslower,		"scfslower"	},
-	{1UL << PG_nocache,		"nocache"	},
 #endif
 };
 

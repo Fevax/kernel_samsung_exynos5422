@@ -173,6 +173,6 @@ int fimc_is_gframe_cancel(struct fimc_is_groupmgr *groupmgr,
 #define PROGRAM_COUNT(count) (group->pcount = count)
 
 #define GET_GROUP_FRAMEMGR(group) \
-	(((group) && (group)->leader.vctx) ? (&(group)->leader.vctx->q_src->framemgr) : NULL)
+	(((group) && (group)->leader.vctx) ? (&(group)->leader.vctx->q_src.framemgr) : NULL)
 
 #endif

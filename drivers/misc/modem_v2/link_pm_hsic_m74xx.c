@@ -787,13 +787,12 @@ static void link_pm_wait_runtime_status_finish(struct usb_device *udev)
 
 static void link_pm_clear_udev_runtime_error(struct usb_device *udev)
 {
-	unsigned long flags;
 	struct device *dev = &udev->dev;
 
-	spin_lock_irqsave(&dev->power.lock, flags);
+	spin_lock(&dev->power.lock);
 	link_pm_wait_runtime_status_finish(udev);
 	dev->power.runtime_error = 0;
-	spin_unlock_irqrestore(&dev->power.lock, flags);
+	spin_unlock(&dev->power.lock);
 }
 
 static int link_pm_notify(struct notifier_block *nfb,

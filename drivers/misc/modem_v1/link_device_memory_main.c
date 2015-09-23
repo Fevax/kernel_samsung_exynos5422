@@ -80,13 +80,6 @@ static inline bool ipc_active(struct mem_link_device *mld)
 		return false;
 	}
 
-	if (atomic_read(&mc->forced_cp_crash)) {
-		mif_err("%s<->%s: ERR! forced_cp_crash:%d <%pf>\n",
-			ld->name, mc->name, atomic_read(&mc->forced_cp_crash),
-			CALLER);
-		return false;
-	}
-
 	if (mld->dpram_magic) {
 		unsigned int magic = get_magic(mld);
 		unsigned int access = get_access(mld);
@@ -95,6 +88,13 @@ static inline bool ipc_active(struct mem_link_device *mld)
 				ld->name, mc->name, magic, access, CALLER);
 			return false;
 		}
+	}
+
+	if (atomic_read(&mc->forced_cp_crash)) {
+		mif_err("%s<->%s: ERR! forced_cp_crash:%d <%pf>\n",
+			ld->name, mc->name, atomic_read(&mc->forced_cp_crash),
+			CALLER);
+		return false;
 	}
 
 	return true;
@@ -423,7 +423,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 					need_schedule = true;
 					continue;
 				} else {
-					modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+					mem_forced_cp_crash(mld);
 					need_schedule = false;
 					goto exit;
 				}
@@ -437,7 +437,7 @@ static enum hrtimer_restart tx_timer_func(struct hrtimer *timer)
 				start_tx_flow_ctrl(mld, dev);
 				continue;
 			} else {
-				modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+				mem_forced_cp_crash(mld);
 				need_schedule = false;
 				goto exit;
 			}
@@ -588,7 +588,7 @@ static enum hrtimer_restart sbd_tx_timer_func(struct hrtimer *timer)
 				mask = MASK_SEND_DATA;
 				continue;
 			} else {
-				modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+				mem_forced_cp_crash(mld);
 				need_schedule = false;
 				goto exit;
 			}
@@ -1113,7 +1113,7 @@ static void pass_skb_to_demux(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD for CH.%d\n", ld->name, ch);
 		dev_kfree_skb_any(skb);
-		modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+		mem_forced_cp_crash(mld);
 		return;
 	}
 
@@ -1243,6 +1243,11 @@ static struct sk_buff *rxq_read(struct mem_link_device *mld,
 	/* Finish reading data before incrementing tail */
 	smp_mb();
 
+#ifdef DEBUG_MODEM_IF
+	/* Record the time-stamp */
+	getnstimeofday(&skbpriv(skb)->ts);
+#endif
+
 	return skb;
 
 bad_msg:
@@ -1250,7 +1255,7 @@ bad_msg:
 		FUNC, ld->name, arrow(RX), ld->mc->name,
 		hdr[0], hdr[1], hdr[2], hdr[3]);
 	set_rxq_tail(dev, in);	/* Reset tail (out) pointer */
-	modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+	mem_forced_cp_crash(mld);
 
 no_mem:
 	return NULL;
@@ -1300,7 +1305,7 @@ static int rx_frames_from_dev(struct mem_link_device *mld,
 		if (!iod) {
 			mif_err("%s: ERR! No IOD for CH.%d\n", ld->name, ch);
 			dev_kfree_skb_any(skb);
-			modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+			mem_forced_cp_crash(mld);
 			break;
 		}
 
@@ -1384,7 +1389,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!priv)) {
 		mif_err("%s: ERR! No PRIV in skb@%p\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
-		modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+		mem_forced_cp_crash(mld);
 		return;
 	}
 
@@ -1392,7 +1397,7 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD in skb@%p\n", ld->name, skb);
 		dev_kfree_skb_any(skb);
-		modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+		mem_forced_cp_crash(mld);
 		return;
 	}
 
@@ -1421,18 +1426,12 @@ In a while loop,\n
 @retval "= 0"	if no data received
 @retval "< 0"	if ANY error
 */
-static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb, int budget)
+static int rx_net_frames_from_rb(struct sbd_ring_buffer *rb)
 {
 	int rcvd = 0;
 	struct link_device *ld = rb->ld;
 	struct mem_link_device *mld = ld_to_mem_link_device(ld);
-	unsigned int num_frames;
-
-#ifdef CONFIG_LINK_DEVICE_NAPI
-	num_frames = min_t(unsigned int, rb_usage(rb), budget);
-#else
-	num_frames = rb_usage(rb);
-#endif
+	unsigned int num_frames = rb_usage(rb);
 
 	while (rcvd < num_frames) {
 		struct sk_buff *skb;
@@ -1487,11 +1486,8 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 
 		skb = sbd_pio_rx(rb);
 		if (!skb) {
-#ifdef DEBUG_MODEM_IF
-			panic("skb alloc failed.");
-#else
-			modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
-#endif
+			/* TODO : Replace with panic() */
+			mem_forced_cp_crash(mld);
 			break;
 		}
 
@@ -1505,8 +1501,6 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 			if (fch != ch) {
 				mif_err("frm.ch:%d != rb.ch:%d\n", fch, ch);
 				dev_kfree_skb_any(skb);
-
-				modemctl_notify_event(MDM_EVENT_CP_ABNORMAL_RX);
 				continue;
 			}
 		}
@@ -1520,28 +1514,6 @@ static int rx_ipc_frames_from_rb(struct sbd_ring_buffer *rb)
 		mif_err("%s: %s<-%s: WARN! rcvd %d < num_frames %d\n",
 			ld->name, iod->name, mc->name, rcvd, num_frames);
 	}
-
-	return rcvd;
-}
-
-int mem_netdev_poll(struct napi_struct *napi, int budget)
-{
-	int rcvd;
-	struct vnet *vnet = netdev_priv(napi->dev);
-	struct mem_link_device *mld =
-		container_of(vnet->ld, struct mem_link_device, link_dev);
-	struct sbd_ring_buffer *rb =
-		sbd_ch2rb(&mld->sbd_link_dev, vnet->iod->id, RX);
-
-	rcvd = rx_net_frames_from_rb(rb, budget);
-
-	/* no more ring buffer to process */
-	if (rcvd < budget) {
-		napi_complete(napi);
-		//vnet->ld->enable_irq(vnet->ld);
-	}
-
-	mif_debug("%d pkts\n", rcvd);
 
 	return rcvd;
 }
@@ -1570,17 +1542,10 @@ static void recv_sbd_ipc_frames(struct mem_link_device *mld,
 		if (unlikely(rb_empty(rb)))
 			continue;
 
-		if (likely(sipc_ps_ch(rb->ch))) {
-#ifdef CONFIG_LINK_DEVICE_NAPI
-			//mld->link_dev.disable_irq(&mld->link_dev);
-			if (napi_schedule_prep(&rb->iod->napi))
-				__napi_schedule(&rb->iod->napi);
-#else
-			rx_net_frames_from_rb(rb, 0);
-#endif
-		} else {
+		if (likely(sipc_ps_ch(rb->ch)))
+			rx_net_frames_from_rb(rb);
+		else
 			rx_ipc_frames_from_rb(rb);
-		}
 	}
 }
 #endif
@@ -1655,6 +1620,159 @@ static void mem_rx_task(unsigned long data)
 		ipc_rx_func(mld);
 	else
 		queue_delayed_work(ld->rx_wq, &mld->udl_rx_dwork, 0);
+}
+
+/**
+@}
+*/
+#endif
+
+/*============================================================================*/
+
+#ifdef GROUP_MEM_CP_CRASH
+/**
+@weakgroup group_mem_cp_crash
+@{
+*/
+
+static void set_modem_state(struct mem_link_device *mld, enum modem_state state)
+{
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	unsigned long flags;
+
+	/* Change the modem state to STATE_CRASH_EXIT for the FMT IO device */
+	spin_lock_irqsave(&mc->lock, flags);
+	if (mc->iod)
+		mc->iod->modem_state_changed(mc->iod, state);
+	spin_unlock_irqrestore(&mc->lock, flags);
+
+	/* time margin for taking state changes by rild */
+	if (mc->iod)
+		mdelay(100);
+
+	/* Change the modem state to STATE_CRASH_EXIT for the BOOT IO device */
+	spin_lock_irqsave(&mc->lock, flags);
+	if (mc->bootd)
+		mc->bootd->modem_state_changed(mc->bootd, state);
+	spin_unlock_irqrestore(&mc->lock, flags);
+}
+
+void mem_handle_cp_crash(struct mem_link_device *mld, enum modem_state state)
+{
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+
+#ifdef CONFIG_LINK_POWER_MANAGEMENT
+	if (mld->stop_pm)
+		mld->stop_pm(mld);
+#endif
+
+	/* Disable normal IPC */
+	set_magic(mld, MEM_CRASH_MAGIC);
+	set_access(mld, 0);
+
+	stop_tx(mld);
+	purge_txq(mld);
+
+	if (cp_online(mc))
+		set_modem_state(mld, state);
+
+	atomic_set(&mc->forced_cp_crash, 0);
+}
+
+/**
+@brief		handle no CRASH_ACK from CP
+
+This function will be invoked if there will have been no CRASH_ACK from CP in
+FORCE_CRASH_ACK_TIMEOUT after AP sends a CP_CRASH request to CP.
+
+@param arg	the pointer to a mem_link_device instance
+*/
+static void handle_no_cp_crash_ack(unsigned long arg)
+{
+	struct mem_link_device *mld = (struct mem_link_device *)arg;
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+
+	if (cp_crashed(mc)) {
+		mif_debug("%s: STATE_CRASH_EXIT without CRASH_ACK\n",
+			ld->name);
+	} else {
+		mif_err("%s: ERR! No CRASH_ACK from CP\n", ld->name);
+		mem_handle_cp_crash(mld, STATE_CRASH_EXIT);
+	}
+}
+
+/**
+@brief		trigger an enforced CP crash
+
+@param mld	the pointer to a mem_link_device instance
+*/
+void mem_forced_cp_crash(struct mem_link_device *mld)
+{
+	struct link_device *ld = &mld->link_dev;
+	struct modem_ctl *mc = ld->mc;
+	bool duplicated = false;
+	unsigned long flags;
+
+	/* Disable normal IPC */
+	set_magic(mld, MEM_CRASH_MAGIC);
+	set_access(mld, 0);
+
+	spin_lock_irqsave(&mld->lock, flags);
+	if (atomic_read(&mc->forced_cp_crash))
+		duplicated = true;
+	else
+		atomic_set(&mc->forced_cp_crash, 1);
+	spin_unlock_irqrestore(&mld->lock, flags);
+
+	if (duplicated) {
+		mif_err("%s: %s: ALREADY in progress <%pf>\n",
+			FUNC, ld->name, CALLER);
+		return;
+	}
+
+	if (!cp_online(mc)) {
+		mif_err("%s: %s: %s.state %s != ONLINE <%pf>\n",
+			FUNC, ld->name, mc->name, mc_state(mc), CALLER);
+		return;
+	}
+
+	if (mc->wake_lock) {
+		if (!wake_lock_active(mc->wake_lock)) {
+			wake_lock(mc->wake_lock);
+			mif_err("%s->wake_lock locked\n", mc->name);
+		}
+	}
+
+	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP)) {
+		stop_net_ifaces(ld);
+
+		if (mld->debug_info)
+			mld->debug_info();
+
+		/**
+		 * If there is no CRASH_ACK from CP in a timeout,
+		 * handle_no_cp_crash_ack() will be executed.
+		 */
+		mif_add_timer(&mc->crash_ack_timer, FORCE_CRASH_ACK_TIMEOUT,
+			      handle_no_cp_crash_ack, (unsigned long)mld);
+
+		/* Send CRASH_EXIT command to a CP */
+		send_ipc_irq(mld, cmd2int(CMD_CRASH_EXIT));
+	} else {
+		modemctl_notify_event(MDM_EVENT_CP_FORCE_CRASH);
+	}
+
+	mif_err("%s->%s: CP_CRASH_REQ <%pf>\n", ld->name, mc->name, CALLER);
+
+#ifdef DEBUG_MODEM_IF
+	if (in_interrupt())
+		queue_work(system_nrt_wq, &mld->dump_work);
+	else
+		save_mem_dump(mld);
+#endif
 }
 
 /**
@@ -2023,6 +2141,21 @@ static int mem_update_firm_info(struct link_device *ld, struct io_device *iod,
 }
 
 /**
+@brief		function for the @b force_dump method in a link_device instance
+
+@param ld	the pointer to a link_device instance
+@param iod	the pointer to an io_device instance
+*/
+static int mem_force_dump(struct link_device *ld, struct io_device *iod)
+{
+	struct mem_link_device *mld = to_mem_link_device(ld);
+	mif_err("+++\n");
+	mem_forced_cp_crash(mld);
+	mif_err("---\n");
+	return 0;
+}
+
+/**
 @brief		function for the @b dump_start method in a link_device instance
 
 @param ld	the pointer to a link_device instance
@@ -2069,11 +2202,15 @@ static int mem_start_upload(struct link_device *ld, struct io_device *iod)
 static void mem_close_tx(struct link_device *ld)
 {
 	struct mem_link_device *mld = to_mem_link_device(ld);
+	struct modem_ctl *mc = ld->mc;
 	unsigned long flags;
 
 	spin_lock_irqsave(&ld->lock, flags);
 	ld->state = LINK_STATE_OFFLINE;
 	spin_unlock_irqrestore(&ld->lock, flags);
+
+	if (timer_pending(&mc->crash_ack_timer))
+		del_timer(&mc->crash_ack_timer);
 
 	stop_tx(mld);
 	purge_txq(mld);
@@ -2454,7 +2591,6 @@ struct mem_link_device *mem_create_link_device(enum mem_iface_type type,
 	ld->terminate_comm = mem_terminate_comm;
 #endif
 	ld->send = mem_send;
-	ld->netdev_poll = mem_netdev_poll;
 
 	ld->boot_on = mem_boot_on;
 	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_BOOT)) {
@@ -2463,6 +2599,8 @@ struct mem_link_device *mem_create_link_device(enum mem_iface_type type,
 		ld->dload_start = mem_start_download;
 		ld->firm_update = mem_update_firm_info;
 	}
+
+	ld->force_dump = mem_force_dump;
 
 	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP)) {
 		ld->dump_start = mem_start_upload;

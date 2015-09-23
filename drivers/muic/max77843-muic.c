@@ -55,6 +55,33 @@
 extern struct muic_platform_data muic_pdata;
 static bool debug_en_vps = false;
 
+/* don't access this variable directly!! except get_switch_sel_value function.
+ * you must get switch_sel value by using get_switch_sel function. */
+static int switch_sel;
+
+/* func : set_switch_sel
+ * switch_sel value get from bootloader comand line
+ * switch_sel data consist 8 bits (xxxxyyyyzzzz)
+ * first 4bits(zzzz) mean path infomation.
+ * next 4bits(yyyy) mean if pmic version info
+ * next 4bits(xxxx) mean afc disable info
+ */
+static int set_switch_sel(char *str)
+{
+	get_option(&str, &switch_sel);
+	switch_sel = switch_sel & 0xfff;
+	pr_info("%s:%s switch_sel: 0x%03x\n", MUIC_DEV_NAME, __func__,
+			switch_sel);
+
+	return switch_sel;
+}
+__setup("pmic_info=", set_switch_sel);
+
+static int get_switch_sel(void)
+{
+	return switch_sel;
+}
+
 struct max77843_muic_vps_data {
 	u8				adc1k;
 	u8				adcerr;
@@ -2025,9 +2052,7 @@ static void max77843_muic_detect_dev(struct max77843_muic_data *muic_data, int i
 	u8 status[3];
 	u8 hvcontrol[2];
 	u8 adc1k, adcerr, adc, vbvolt, chgdetrun, chgtyp;
-#if defined(CONFIG_HV_MUIC_MAX77843_AFC)
 	u8 vdnmon, dpdnvden, mpnack, vbadc;
-#endif /* CONFIG_HV_MUIC_MAX77843_AFC */
 	int ret;
 	int i;
 
@@ -2062,7 +2087,6 @@ static void max77843_muic_detect_dev(struct max77843_muic_data *muic_data, int i
 	chgdetrun = status[1] & STATUS2_CHGDETRUN_MASK;
 	chgtyp = status[1] & STATUS2_CHGTYP_MASK;
 
-#if defined(CONFIG_HV_MUIC_MAX77843_AFC)
 	mpnack = status[2] & STATUS3_MPNACK_MASK;
 	vdnmon = status[2] & STATUS3_VDNMON_MASK;
 	vbadc = status[2] & STATUS3_VBADC_MASK;
@@ -2072,24 +2096,20 @@ static void max77843_muic_detect_dev(struct max77843_muic_data *muic_data, int i
 		muic_data->is_mrxrdy = true;
 	else
 		muic_data->is_mrxrdy = false;
-#endif /* CONFIG_HV_MUIC_MAX77843_AFC */
 
 	pr_info("%s:%s adc1k:0x%x adcerr:0x%x[%c] adc:0x%x vb:0x%x chgdetrun:0x%x"
 		" chgtyp:0x%x\n", MUIC_DEV_NAME, __func__, adc1k,
 		adcerr, (muic_data->ignore_adcerr ? 'T' : 'F'),
 		adc, vbvolt, chgdetrun, chgtyp);
 
-#if defined(CONFIG_HV_MUIC_MAX77843_AFC)
 	pr_info("%s:%s vdnmon:0x%x mpnack:0x%x vbadc:0x%x dpdnvden:0x%x\n",
 		MUIC_DEV_NAME, __func__, vdnmon, mpnack, vbadc, dpdnvden);
-#endif /* CONFIG_HV_MUIC_MAX77843_AFC */
 
 	/* Workaround for Factory mode.
 	 * Abandon adc interrupt of approximately +-100K range
 	 * if previous cable status was JIG UART BOOT OFF.
 	 */
-	if ((muic_data->attached_dev == ATTACHED_DEV_JIG_UART_OFF_MUIC) ||
-		(muic_data->attached_dev == ATTACHED_DEV_JIG_UART_OFF_VB_FG_MUIC)) {
+	if (muic_data->attached_dev == ATTACHED_DEV_JIG_UART_OFF_MUIC) {
 		if ((adc == (ADC_JIG_UART_OFF + 1)) ||
 				(adc == (ADC_JIG_UART_OFF - 1))) {
 			if (!muic_data->is_factory_start || adc != ADC_JIG_UART_ON) {
@@ -2581,11 +2601,8 @@ static int max77843_muic_probe(struct platform_device *pdev)
 #else
 	muic_data->ignore_adcerr = false;
 #endif /* CONFIG_MUIC_MAX77843_IGNORE_ADCERR_WA */
-
-#if defined(CONFIG_HV_MUIC_MAX77843_AFC)
 	max77843_muic_set_afc_ready(muic_data, false);
 	muic_data->afc_count = 0;
-#endif /* CONFIG_HV_MUIC_MAX77843_AFC */
 #if defined(CONFIG_MUIC_MAX77843_RESET_WA)
 	set_muic_reset(muic_data, false);
 #endif

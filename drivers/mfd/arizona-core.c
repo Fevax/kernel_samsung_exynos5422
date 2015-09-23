@@ -237,7 +237,7 @@ static irqreturn_t arizona_overclocked(int irq, void *data)
 	struct arizona *arizona = data;
 	unsigned int val[3];
 	int ret;
-
+	
 	ret = regmap_bulk_read(arizona->regmap, ARIZONA_INTERRUPT_RAW_STATUS_6,
 			       &val[0], 3);
 	if (ret != 0) {
@@ -735,12 +735,12 @@ const struct dev_pm_ops arizona_pm_ops = {
 EXPORT_SYMBOL_GPL(arizona_pm_ops);
 
 #ifdef CONFIG_OF
-unsigned long arizona_of_get_type(struct device *dev)
+int arizona_of_get_type(struct device *dev)
 {
 	const struct of_device_id *id = of_match_device(arizona_of_match, dev);
 
 	if (id)
-		return (unsigned long)id->data;
+		return (int)id->data;
 	else
 		return 0;
 }

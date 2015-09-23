@@ -73,11 +73,10 @@ static struct modem_shared *create_modem_shared_data(
 		(MAX_MIF_SEPA_SIZE * 2), GFP_KERNEL);
 	if (!msd->storage.addr) {
 		mif_err("IPC logger buff alloc failed!!\n");
-		kfree(msd);
 		return NULL;
 	}
 	memset(msd->storage.addr, 0, size + (MAX_MIF_SEPA_SIZE * 2));
-	memcpy(msd->storage.addr, MIF_SEPARATOR, strlen(MIF_SEPARATOR));
+	memcpy(msd->storage.addr, MIF_SEPARATOR, MAX_MIF_SEPA_SIZE);
 	msd->storage.addr += MAX_MIF_SEPA_SIZE;
 	memcpy(msd->storage.addr, &size, MAX_MIF_SEPA_SIZE);
 	msd->storage.addr += MAX_MIF_SEPA_SIZE;

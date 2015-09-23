@@ -336,8 +336,10 @@
 	gps {
 		compatible = "samsung,exynos54xx-bcm4753";
 
-		pinctrl-names = "default";
+		pinctrl-names = "default", "host_wake", "host_wake_irq";
 		pinctrl-0 = <&ssp_gps_pwr_en &ssp_host_wake>;
+		pinctrl-1 = <&ssp_host_wake>;
+		pinctrl-2 = <&ssp_host_wake_irq>;
 
 		gpios = <&gpg2 0 0x1
 			      &gpa1 0 0xf

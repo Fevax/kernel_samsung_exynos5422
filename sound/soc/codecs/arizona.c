@@ -882,8 +882,6 @@ static int arizona_update_input(struct arizona* arizona, bool enable)
 
 	switch (arizona->type) {
 	case WM5110:
-		if (arizona->rev >= 6)
-			return 0;
 		break;
 	default:
 		return 0;
@@ -1171,96 +1169,6 @@ static int florida_hp_post_disable(struct snd_soc_dapm_widget *w)
 
 	return 0;
 }
-
-static int arizona_set_dre(struct arizona *arizona, unsigned int shift,
-			   bool enable)
-{
-	unsigned int pga = ARIZONA_OUTPUT_PATH_CONFIG_1L + shift * 4;
-	unsigned int mask = 1 << shift;
-	unsigned int val = 0;
-	const struct reg_default *wseq;
-	int nregs;
-	bool change;
-
-	if (enable) {
-		regmap_update_bits_check(arizona->regmap, ARIZONA_DRE_ENABLE,
-					 mask, mask, &change);
-		if (!change)
-			return 0;
-
-		switch (shift) {
-		case ARIZONA_DRE1L_ENA_SHIFT:
-			mask = ARIZONA_OUT1L_ENA;
-			wseq = florida_dre_left_enable;
-			nregs = ARRAY_SIZE(florida_dre_left_enable);
-			break;
-		case ARIZONA_DRE1R_ENA_SHIFT:
-			mask = ARIZONA_OUT1R_ENA;
-			wseq = florida_dre_right_enable;
-			nregs = ARRAY_SIZE(florida_dre_right_enable);
-			break;
-		default:
-			return 0;
-		}
-	} else {
-		regmap_update_bits_check(arizona->regmap, ARIZONA_DRE_ENABLE,
-					 mask, 0, &change);
-		if (!change)
-			return 0;
-
-		/* Force reset of PGA Vol */
-		regmap_update_bits(arizona->regmap, pga,
-				   ARIZONA_OUT1L_PGA_VOL_MASK, 0x7F);
-		regmap_update_bits(arizona->regmap, pga,
-				   ARIZONA_OUT1L_PGA_VOL_MASK, 0x80);
-
-		switch (shift) {
-		case ARIZONA_DRE1L_ENA_SHIFT:
-			mask = ARIZONA_OUT1L_ENA;
-			wseq = florida_no_dre_left_enable;
-			nregs = ARRAY_SIZE(florida_no_dre_left_enable);
-			break;
-		case ARIZONA_DRE1R_ENA_SHIFT:
-			mask = ARIZONA_OUT1R_ENA;
-			wseq = florida_no_dre_right_enable;
-			nregs = ARRAY_SIZE(florida_no_dre_right_enable);
-			break;
-		default:
-			return 0;
-		}
-	}
-
-	/* If the output is on we need to update the disable sequence */
-	regmap_read(arizona->regmap, ARIZONA_OUTPUT_ENABLES_1, &val);
-
-	if (val & mask) {
-		regmap_multi_reg_write(arizona->regmap, wseq, nregs);
-		udelay(1000);
-	}
-
-	return 0;
-}
-
-int arizona_put_dre(struct snd_kcontrol *kcontrol,
-		    struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_kcontrol_chip(kcontrol);
-	struct arizona *arizona = dev_get_drvdata(codec->dev->parent);
-	struct soc_mixer_control *mc =
-		(struct soc_mixer_control *)kcontrol->private_value;
-	unsigned int lshift = mc->shift;
-	unsigned int rshift = mc->rshift;
-
-	mutex_lock(&arizona->dapm->card->dapm_mutex);
-
-	arizona_set_dre(arizona, lshift, !!ucontrol->value.integer.value[0]);
-	arizona_set_dre(arizona, rshift, !!ucontrol->value.integer.value[1]);
-
-	mutex_unlock(&arizona->dapm->card->dapm_mutex);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(arizona_put_dre);
 
 int arizona_out_ev(struct snd_soc_dapm_widget *w,
 		   struct snd_kcontrol *kcontrol,
@@ -2912,10 +2820,10 @@ int arizona_disable_force_bypass(struct snd_soc_codec *codec)
 				   ARIZONA_MICB1_BYPASS, 0);
 	if (!micbias[1].bypass && micbias[1].mV)
 		regmap_update_bits(arizona->regmap, ARIZONA_MIC_BIAS_CTRL_2,
-				   ARIZONA_MICB2_BYPASS, 0);
+				   ARIZONA_MICB1_BYPASS, 0);
 	if (!micbias[2].bypass && micbias[2].mV)
 		regmap_update_bits(arizona->regmap, ARIZONA_MIC_BIAS_CTRL_3,
-				   ARIZONA_MICB3_BYPASS, 0);
+				   ARIZONA_MICB1_BYPASS, 0);
 
 	return 0;
 }

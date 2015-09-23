@@ -880,7 +880,6 @@ static void hevc_handle_frame(struct hevc_ctx *ctx,
 		ctx->is_dpb_realloc = 1;
 		ctx->state = HEVCINST_HEAD_PARSED;
 		ctx->capture_state = QUEUE_FREE;
-		ctx->wait_state = WAIT_DECODING;
 		hevc_handle_frame_all_extracted(ctx);
 		goto leave_handle_frame;
 	}
@@ -900,7 +899,7 @@ static void hevc_handle_frame(struct hevc_ctx *ctx,
 	if (dec->is_dynamic_dpb) {
 		switch (dst_frame_status) {
 		case HEVC_DEC_STATUS_DECODING_ONLY:
-			dec->dynamic_used |= hevc_get_dec_used_flag();
+			dec->dynamic_used = hevc_get_dec_used_flag();
 			/* Fall through */
 		case HEVC_DEC_STATUS_DECODING_DISPLAY:
 			hevc_handle_ref_frame(ctx);
@@ -1644,7 +1643,6 @@ static int hevc_release(struct file *file)
 
 	if (ctx->type == HEVCINST_DECODER){
 		hevc_dec_cleanup_user_shared_handle(ctx);
-		kfree(ctx->dec_priv->ref_info);
 		kfree(ctx->dec_priv);
 	}
 

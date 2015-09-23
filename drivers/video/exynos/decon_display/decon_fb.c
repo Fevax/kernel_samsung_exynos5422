@@ -33,7 +33,6 @@
 #include <mach/regs-clock.h>
 #include <plat/cpu.h>
 #include <mach/cpufreq.h>
-#include <mach/smc.h>
 
 #include "regs-decon.h"
 
@@ -1283,6 +1282,7 @@ static irqreturn_t decon_fb_isr_for_eint(int irq, void *dev_id)
 	if (sfb->output_on && sfb->power_state == POWER_ON && sfb->blank_mode == FB_BLANK_UNBLANK)
 		disp_pm_te_triggered(get_display_driver());
 #endif
+
 	return IRQ_HANDLED;
 }
 #endif
@@ -1338,7 +1338,6 @@ static irqreturn_t s3c_fb_irq(int irq, void *dev_id)
  * @sfb: main hardware state
  * @timeout: timeout in msecs, or 0 to wait indefinitely.
  */
-
 static int s3c_fb_wait_for_vsync(struct s3c_fb *sfb, u32 timeout)
 {
 	ktime_t timestamp;
@@ -1955,11 +1954,10 @@ static int s3c_fb_set_win_buffer(struct s3c_fb *sfb, struct s3c_fb_win *win,
 			win->fbinfo->fix.line_length,
 			win->fbinfo->var.bits_per_pixel);
 
+
 	regs->vidosd_a[win_no] = vidosd_a(win_config->x, win_config->y);
 	regs->vidosd_b[win_no] = vidosd_b(win_config->x, win_config->y,
 			win_config->w, win_config->h);
-
-	regs->protection[win_no] = win_config->protection;
 
 	if ((win_config->plane_alpha > 0) && (win_config->plane_alpha < 0xFF)) {
 		alpha0 = win_config->plane_alpha;
@@ -2776,22 +2774,6 @@ static void __s3c_fb_update_regs(struct s3c_fb *sfb, struct s3c_reg_data *regs)
 	}
 }
 
-static void decon_set_protected_content(struct s3c_fb *sfb, bool enable)
-{
-	int  ret;
-
-	if (sfb->protected_content == enable)
-		return;
-
-	ret = exynos_smc(SMC_PROTECTION_SET, 0, DEV_DECON, enable);
-	if (ret)
-		dev_warn(sfb->dev, "decon protection Enable failed. ret(%d)\n", ret);
-	else
-		dev_dbg(sfb->dev, "DRM %s\n", enable ? "enabled" : "disabled");
-
-	sfb->protected_content = enable;
-}
-
 static void s3c_fd_fence_wait(struct s3c_fb *sfb, struct sync_fence *fence)
 {
 	int err = sync_fence_wait(fence, 900);
@@ -2809,7 +2791,6 @@ static void s3c_fb_update_regs(struct s3c_fb *sfb, struct s3c_reg_data *regs)
 	int count = 10;
 	int local_cnt = 0;
 	int i;
-	int protection = 0;
 	struct display_driver *dispdrv;
 
 	dispdrv = get_display_driver();
@@ -2825,14 +2806,12 @@ static void s3c_fb_update_regs(struct s3c_fb *sfb, struct s3c_reg_data *regs)
 	for (i = 0; i < sfb->variant.nr_windows; i++) {
 		old_dma_bufs[i] = sfb->windows[i]->dma_buf_data;
 		if (WIN_CONFIG_DMA(i)) {
-			protection += regs->protection[i];
 			if (regs->dma_buf_data[i].fence)
 				s3c_fd_fence_wait(sfb,
 			regs->dma_buf_data[i].fence);
 		} else
 			local_cnt++;
 	}
-	decon_set_protected_content(sfb, !!protection);
 #if defined(CONFIG_DECON_DEVFREQ)
 	if (prev_overlap_cnt < regs->win_overlap_cnt)
 		exynos5_update_media_layers(TYPE_DECON, regs->win_overlap_cnt);

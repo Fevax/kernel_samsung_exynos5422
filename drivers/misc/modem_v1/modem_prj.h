@@ -28,7 +28,6 @@
 #include <linux/gpio.h>
 #include <linux/irq.h>
 #include <linux/interrupt.h>
-#include <linux/netdevice.h>
 
 #include <linux/platform_data/modem_debug.h>
 #include <linux/platform_data/modem_v1.h>
@@ -117,12 +116,6 @@ Definitions for IO devices
 
 #define IPv6			6
 #define SOURCE_MAC_ADDR		{0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC}
-
-/**
-@addtogroup group_mem_cp_crash
-@{
-*/
-#define FORCE_CRASH_ACK_TIMEOUT		(10 * HZ)
 
 /* Loopback */
 #define CP2AP_LOOPBACK_CHANNEL	30
@@ -239,7 +232,6 @@ static inline bool sipc_log_ch(u8 ch)
 
 struct vnet {
 	struct io_device *iod;
-	struct link_device *ld;
 };
 
 /* for fragmented data from link devices */
@@ -257,6 +249,9 @@ struct fragmented_data {
 struct skbuff_private {
 	struct io_device *iod;
 	struct link_device *ld;
+
+	/* for time-stamping */
+	struct timespec ts;
 
 	u32 sipc_ch:8,	/* SIPC Channel Number			*/
 	    frm_ctrl:8,	/* Multi-framing control		*/
@@ -314,7 +309,6 @@ struct io_device {
 	/* Misc and net device structures for the IO device */
 	struct miscdevice  miscdev;
 	struct net_device *ndev;
-	struct napi_struct napi;
 
 	/* ID and Format for channel on the link */
 	unsigned int id;
@@ -531,8 +525,6 @@ struct link_device {
 
 	/* Close (stop) TX with physical link (on CP crash, etc.) */
 	void (*close_tx)(struct link_device *ld);
-
-	int (*netdev_poll)(struct napi_struct *napi, int budget);
 
 	/* Above are common methods to all memory-type link devices           */
 	/*====================================================================*/
@@ -823,6 +815,5 @@ static inline bool rx_possible(struct modem_ctl *mc)
 }
 
 int sipc5_init_io_device(struct io_device *iod);
-int mem_netdev_poll(struct napi_struct *napi, int budget);
 
 #endif

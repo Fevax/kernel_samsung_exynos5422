@@ -17,11 +17,9 @@
 #include <linux/version.h>
 #include <linux/clk.h>
 #include <linux/console.h>
-#include <linux/delay.h>
 #include <linux/fb.h>
 #include <linux/pm_runtime.h>
 #include <decon_fb.h>
-#include <linux/trustedui.h>
 #include <t-base-tui.h>
 #include "dciTui.h"
 #include "tlcTui.h"
@@ -160,27 +158,12 @@ static void blank_framebuffer(int getref)
 	/* blank the framebuffer */
 	lock_fb_info(fb_info);
 	console_lock();
-	
-	/* Set linux TUI flag */
-		trustedui_set_mask(TRUSTEDUI_MODE_TUI_SESSION);
-		trustedui_blank_set_counter(0);
-
-	if(false == sfb->output_on) {
-			printk("%s !!!!!!!!!!!!!! debug to TUI\n", __func__);
-		//trustedui_blank_inc();
-		printk("%s doing nothing in the blank\n", __func__);
-		
-	} else {
-		fb_info->flags |= FBINFO_MISC_USEREVENT;
-		printk("%s call fb_blank\n", __func__);
-		fb_blank(fb_info, FB_BLANK_POWERDOWN);
-		fb_info->flags &= ~FBINFO_MISC_USEREVENT;
-	}
-
-	trustedui_set_mask(TRUSTEDUI_MODE_VIDEO_SECURED);
+	fb_info->flags |= FBINFO_MISC_USEREVENT;
+	printk("%s call fb_blank\n", __func__);
+	fb_blank(fb_info, FB_BLANK_POWERDOWN);
+	fb_info->flags &= ~FBINFO_MISC_USEREVENT;
 	console_unlock();
 	unlock_fb_info(fb_info);
-
 	printk("%s call s3c_fb_deactivate_vsync\n", __func__);
 //	s3c_fb_deactivate_vsync(sfb);
 }
@@ -217,33 +200,7 @@ static void unblank_framebuffer(int releaseref)
 	 */
 	console_lock();
 	fb_info->flags |= FBINFO_MISC_USEREVENT;
-
-	trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
-
-	printk("tui counter %d\n", trustedui_blank_get_counter());
-	if (0 == trustedui_blank_get_counter()) {
-		printk("%s doing nothing on unblank\n", __func__);
-		
-	}
-	else if (1 ==  trustedui_blank_get_counter()) {
-		printk("TUI FB_BLANK_UNBLANK\n");
-		fb_blank(fb_info, FB_BLANK_UNBLANK);
-	}
-	else if (1 < trustedui_blank_get_counter()) {
-		
-		fb_blank(fb_info, FB_BLANK_UNBLANK);
-		trustedui_set_mode(TRUSTEDUI_MODE_OFF);
-		fb_blank(fb_info, FB_BLANK_POWERDOWN);
-
-	}
-	else {
-		printk("Oops should be unreachable FB_BLANK_POWERDOWN\n");
-		trustedui_set_mode(TRUSTEDUI_MODE_OFF);
-		fb_blank(fb_info, FB_BLANK_UNBLANK);
-	}
-	
-	trustedui_set_mode(TRUSTEDUI_MODE_OFF);
-		
+	fb_blank(fb_info, FB_BLANK_UNBLANK);
 	fb_info->flags &= ~FBINFO_MISC_USEREVENT;
 	console_unlock();
 
@@ -274,8 +231,6 @@ void hal_tui_exit(void)
 uint32_t hal_tui_alloc(tuiAllocBuffer_t *allocbuffer, size_t allocsize, uint32_t number)
 {
 	uint32_t ret = TUI_DCI_ERR_INTERNAL_ERROR;
-
-	trustedui_set_mask(TRUSTEDUI_MODE_INPUT_SECURED);
 
 	g_tuiMemPool.pa = hal_tui_video_space_alloc();
 	g_tuiMemPool.size = 0x2000000;
@@ -348,7 +303,9 @@ void hal_tui_free(void)
 
 uint32_t hal_tui_deactivate(void)
 {
-	
+	/* Set linux TUI flag */
+	trustedui_set_mask(TRUSTEDUI_MODE_TUI_SESSION);
+	trustedui_blank_set_counter(0);
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
 	printk(KERN_ERR "blanking!\n");
 
@@ -357,7 +314,7 @@ uint32_t hal_tui_deactivate(void)
 	 * be re enabled and put into a HAL */
 //		disable_irq(gpio_to_irq(190));
 #endif
-
+	trustedui_set_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
 
 	return TUI_DCI_OK;
 }
@@ -365,7 +322,7 @@ uint32_t hal_tui_deactivate(void)
 uint32_t hal_tui_activate(void)
 {
 	// Protect NWd
-
+	trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
 	pr_info("Unblanking\n");
@@ -376,13 +333,13 @@ uint32_t hal_tui_activate(void)
 #endif
 
 	/* Clear linux TUI flag */
-
+	trustedui_set_mode(TRUSTEDUI_MODE_OFF);
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI_FB_BLANK
 	pr_info("Unsetting TUI flag (blank counter=%d)", trustedui_blank_get_counter());
-	//if (0 < trustedui_blank_get_counter()) {
-	//	blank_framebuffer(0);
-	//}
+	if (0 < trustedui_blank_get_counter()) {
+		blank_framebuffer(0);
+	}
 #endif
 
 	return TUI_DCI_OK;

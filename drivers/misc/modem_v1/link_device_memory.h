@@ -217,6 +217,21 @@ struct mem_ipc_device {
 
 /*============================================================================*/
 
+#ifdef GROUP_MEM_CP_CRASH
+/**
+@addtogroup group_mem_cp_crash
+@{
+*/
+
+#define FORCE_CRASH_ACK_TIMEOUT		(10 * HZ)
+
+/**
+@}
+*/
+#endif
+
+/*============================================================================*/
+
 #ifdef GROUP_MEM_LINK_SNAPSHOT
 /**
 @addtogroup group_mem_link_snapshot
@@ -1005,6 +1020,7 @@ void send_res_ack(struct mem_link_device *mld, struct mem_ipc_device *dev);
 @{
 */
 
+void mem_handle_cp_crash(struct mem_link_device *mld, enum modem_state state);
 void mem_forced_cp_crash(struct mem_link_device *mld);
 
 /**

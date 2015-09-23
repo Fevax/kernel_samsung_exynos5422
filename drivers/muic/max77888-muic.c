@@ -92,6 +92,33 @@ struct max77888_muic_data {
 	u8 path_status;
 };
 
+/* don't access this variable directly!! except get_switch_sel_value function.
+ * you must get switch_sel value by using get_switch_sel function. */
+static int switch_sel;
+
+/* func : set_switch_sel
+ * switch_sel value get from bootloader comand line
+ * switch_sel data consist 8 bits (xxxxzzzz)
+ * first 4bits(zzzz) mean path infomation.
+ * next 4bits(yyyy) mean if pmic version info
+ * next 4bits(xxxx) mean if pmic version info
+ */
+static int set_switch_sel(char *str)
+{
+	get_option(&str, &switch_sel);
+	switch_sel = switch_sel & 0xfff;
+	pr_info("%s:%s switch_sel: 0x%03x\n", MUIC_DEV_NAME, __func__,
+			switch_sel);
+
+	return switch_sel;
+}
+__setup("pmic_info=", set_switch_sel);
+
+static int get_switch_sel(void)
+{
+	return switch_sel;
+}
+
 struct max77888_muic_vps_data {
 	u8				adc1k;
 	u8				adcerr;

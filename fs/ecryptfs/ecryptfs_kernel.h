@@ -42,8 +42,6 @@
 
 #ifdef CONFIG_SDP
 #include <sdp/dek_common.h>
-#include <linux/list.h>
-#include <linux/spinlock.h>
 #endif
 
 #ifdef CONFIG_WTL_ENCRYPTION_FILTER
@@ -257,7 +255,7 @@ struct ecryptfs_crypt_stat {
 #ifdef CONFIG_SDP
 #define ECRYPTFS_DEK_SDP_ENABLED      0x00100000
 #define ECRYPTFS_DEK_IS_SENSITIVE     0x00200000
-#define ECRYPTFS_SDP_IS_CHAMBER_DIR   0x02000000
+
 #endif
 
 	u32 flags;
@@ -404,8 +402,6 @@ struct ecryptfs_mount_crypt_stat {
 #endif
 #ifdef CONFIG_SDP
 	int userid;
-	struct list_head chamber_dir_list;
-	spinlock_t chamber_dir_list_lock;
 #endif
 
 };

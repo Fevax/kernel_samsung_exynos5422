@@ -42,6 +42,8 @@ int gsc_out_hw_reset_off(struct gsc_dev *gsc)
 int gsc_out_hw_set(struct gsc_ctx *ctx)
 {
 	struct gsc_dev *gsc = ctx->gsc_dev;
+	struct exynos_platform_gscaler *pdata = gsc->pdata;
+	struct gsc_scaler *sc = &ctx->scaler;
 	int ret = 0;
 
 	ret = gsc_set_scaler_info(ctx);
@@ -79,6 +81,15 @@ int gsc_out_hw_set(struct gsc_ctx *ctx)
 	gsc_hw_set_h_coef(ctx);
 	gsc_hw_set_v_coef(ctx);
 	gsc_hw_set_input_rotation(ctx);
+
+	if (ctx->gsc_ctrls.rotate->val &&
+		((sc->main_hratio > GSC_SC_UP_MAX_RATIO) ||
+		(sc->main_vratio > GSC_SC_UP_MAX_RATIO)))
+		gsc_pm_qos_ctrl(gsc, GSC_QOS_ON, pdata->mif_min_otf_rot,
+				pdata->int_min_otf);
+	else
+		gsc_pm_qos_ctrl(gsc, GSC_QOS_ON, pdata->mif_min,
+				pdata->int_min_otf);
 
 	gsc_hw_enable_localout(ctx, true);
 	ret = gsc_wait_operating(gsc);
@@ -312,8 +323,9 @@ static long gsc_subdev_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 
 	case GSC_WAIT_STOP:
 		gsc_wait_stop(gsc);
+		gsc_pm_qos_ctrl(gsc, GSC_QOS_OFF, 0, 0);
 		spin_lock_irqsave(&gsc->slock, flags);
-		clear_bit(ST_OUTPUT_STREAMON, &gsc->state);
+			clear_bit(ST_OUTPUT_STREAMON, &gsc->state);
 		spin_unlock_irqrestore(&gsc->slock, flags);
 		wake_up(&gsc->irq_queue);
 		break;
@@ -874,7 +886,6 @@ static int gsc_output_open(struct file *file)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
 	int ret = v4l2_fh_open(file);
-	struct exynos_platform_gscaler *pdata = gsc->pdata;
 
 	if (ret)
 		return ret;
@@ -886,7 +897,6 @@ static int gsc_output_open(struct file *file)
 		return ret;
 	}
 
-	gsc_pm_qos_ctrl(gsc, GSC_QOS_ON, pdata->mif_min, pdata->int_min_otf);
 	/* Return if the corresponding mem2mem/output/capture video node
 	   is already opened. */
 	if (gsc_m2m_opened(gsc) || gsc_cap_opened(gsc) || gsc_out_opened(gsc)) {
@@ -972,7 +982,6 @@ static int gsc_output_close(struct file *file)
 	gsc_ctrls_delete(gsc->out.ctx);
 	v4l2_fh_release(file);
 
-	gsc_pm_qos_ctrl(gsc, GSC_QOS_OFF, 0, 0);
 	bts_otf_initialize(gsc->id, false);
 	pm_runtime_put_sync(&gsc->pdev->dev);
 

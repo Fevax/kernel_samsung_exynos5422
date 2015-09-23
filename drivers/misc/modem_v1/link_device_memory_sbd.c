@@ -548,6 +548,11 @@ static inline struct sk_buff *recv_data(struct sbd_ring_buffer *rb, u16 out)
 	skb_put(skb, len);
 	skb_copy_to_linear_data(skb, src, len);
 
+#ifdef DEBUG_MODEM_IF
+	/* Record the time-stamp */
+	getnstimeofday(&skbpriv(skb)->ts);
+#endif
+
 	return skb;
 }
 

@@ -69,10 +69,7 @@
 /* Timeout value for polling DRDY signal assertion */
 #define DRDY_TIMEOUT_MS      40
 
-#ifdef CONFIG_SEC_FACTORY
-#undef ENABLE_SENSORS_FPRINT_SECURE
-#else
-#define ENABLE_SENSORS_FPRINT_SECURE
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
 #define FEATURE_SPI_WAKELOCK
 #endif /* CONFIG_SEC_FACTORY */
 
@@ -189,4 +186,6 @@ and retrieve data from it simultaneously */
 /* get sensor orienation from the SPI driver*/
 #define VFSSPI_IOCTL_GET_SENSOR_ORIENT	\
 	_IOR(VFSSPI_IOCTL_MAGIC, 18, unsigned int)
+#define VFSSPI_IOCTL_SET_SENSOR_TYPE	\
+	_IOW(VFSSPI_IOCTL_MAGIC, 20, unsigned int)
 #endif /* VFS61XX_H_ */

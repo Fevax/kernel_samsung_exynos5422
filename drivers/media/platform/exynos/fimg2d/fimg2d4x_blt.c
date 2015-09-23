@@ -552,7 +552,6 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 					cmd->dma[ISRC].plane2.size, 0);
 			if (IS_ERR_VALUE(ret)) {
 				fimg2d_err("s/w fallback (%d-1:%d)\n", ISRC, ret);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, false);
 				return ret;
 			}
 		}
@@ -582,7 +581,6 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 				cmd->dma[IMSK].base.size, 0);
 		if (IS_ERR_VALUE(ret)) {
 			fimg2d_err("s/w fallback (%d:%d)\n", IMSK, ret);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
 			return ret;
 		}
 #endif
@@ -616,8 +614,6 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 				cmd->dma[IDST].base.size, 1);
 		if (IS_ERR_VALUE(ret)) {
 			fimg2d_err("s/w fallback (%d-0:%d)\n", IDST, ret);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, IMSK, false);
 			return ret;
 		}
 
@@ -628,9 +624,6 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 					cmd->dma[IDST].plane2.size, 1);
 			if (IS_ERR_VALUE(ret)) {
 				fimg2d_err("s/w fallback (%d-1:%d)\n", IDST, ret);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, IMSK, false);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, IDST, false);
 				return ret;
 			}
 		}

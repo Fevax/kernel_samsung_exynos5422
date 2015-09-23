@@ -30,5 +30,3 @@ obj-$(CONFIG_SENSORS_SSP_MOBEAM)	 += factory/barcode_emul_tmg3992.o
 
 obj-$(CONFIG_SENSORS_SSP_SENSORHUB)	+= ssp_sensorhub.o
 obj-$(CONFIG_SENSORS_MAX86900) += max86900.o
-
-include $(call all-makefiles-under,$(call my-dir))

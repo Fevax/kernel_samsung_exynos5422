@@ -197,10 +197,11 @@
 			synaptics,irq_gpio = <&gpx1 6 0>;
 			synaptics,irq_type = <8200>;
 			synaptics,max_coords = <1079 1919>;	/* x y */
-			synaptics,num_lines = <29 16>;		/* rx tx */
+			synaptics,num_lines = <28 16>;		/* rx tx */
 			synaptics,regulator_dvdd = "tsp_io";
 			synaptics,regulator_avdd = "tsp_avdd_en";
 			synaptics,project_name = "K", "G900H";
+			synaptics,firmware_name = "tsp_synaptics/synaptics_s5100_a3_k_FHD.fw";
 		};
 	};
 
@@ -260,8 +261,18 @@
 		btp_irq: btp-irq {
 			samsung,pins = "gpx3-5";
 			samsung,pin-function = <0>;
-			samsung,pin-pud = <3>;
+			samsung,pin-pud = <1>;
 			samsung,pin-drv = <3>;
+		};
+		btp_irqsleep: btp-irqsleep {
+			samsung,pins = "gpx3-5";
+			samsung,pin-function = <0>;
+			samsung,pin-pud = <1>;
+		};
+		btp_irqidle: btp-irqidle {
+			samsung,pins = "gpx3-5";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <3>;
 		};
 	};
 
@@ -309,8 +320,10 @@
 			compatible = "vfsspi,vfs61xx";
 			reg = <0>;
 			spi-max-frequency = <19200000>;
-			pinctrl-names = "default";
+			pinctrl-names = "default", "sleep", "idle";
 			pinctrl-0 = <&btp_irq &btp_reset &btp_ldo &ocp_flag &ocp_en>;
+			pinctrl-1 = <&btp_irqsleep>;
+			pinctrl-2 = <&btp_irqidle>;
 
 			gpio-controller;
 			#gpio-cells = <2>;
@@ -456,6 +469,8 @@
 			wlf,dmic-ref = <2 1 3 2>;
 			/* 1st cell:IN1 2rd cell:IN2 3nd cell:IN3 4th cell:IN4 */
 			wlf,inmode = <2 0 2 2>;
+			/* 1st cell:OUT1 2nd cell:OUT2 3rd cell:OUT3... 6th cell:OUT6 */
+			wlf,out-mono = <0 0 1 0 0 0>;
 
 			AVDD-supply = <&ldo18_reg>;
 			LDOVDD-supply = <&ldo18_reg>;

@@ -1016,8 +1016,10 @@ static void s5p_mfc_handle_frame_new(struct s5p_mfc_ctx *ctx, unsigned int err)
 	}
 
 	/* If frame is same as previous then skip and do not dequeue */
-	if (frame_type == S5P_FIMV_DISPLAY_FRAME_NOT_CODED)
-		return;
+	if (frame_type == S5P_FIMV_DISPLAY_FRAME_NOT_CODED) {
+		if (!(not_coded_cond(ctx) && FW_HAS_NOT_CODED(dev)))
+			return;
+	}
 
 	if (dec->is_dynamic_dpb) {
 		prev_flag = dec->dynamic_used;
@@ -2368,15 +2370,15 @@ static int s5p_mfc_release(struct file *file)
 	 * return instance and free reosurces */
 	if (!atomic_read(&dev->watchdog_run) &&
 		(ctx->inst_no != MFC_NO_INSTANCE_SET)) {
-		ctx->state = MFCINST_RETURN_INST;
-		spin_lock_irq(&dev->condlock);
-		set_bit(ctx->num, &dev->ctx_work_bits);
-		spin_unlock_irq(&dev->condlock);
-
 		/* Wait for hw_lock == 0 for this context */
 		wait_event_timeout(ctx->queue,
 				(test_bit(ctx->num, &dev->hw_lock) == 0),
 				msecs_to_jiffies(MFC_INT_SHORT_TIMEOUT));
+
+		ctx->state = MFCINST_RETURN_INST;
+		spin_lock_irq(&dev->condlock);
+		set_bit(ctx->num, &dev->ctx_work_bits);
+		spin_unlock_irq(&dev->condlock);
 
 		/* To issue the command 'CLOSE_INSTANCE' */
 		s5p_mfc_try_run(dev);
@@ -2419,6 +2421,7 @@ static int s5p_mfc_release(struct file *file)
 
 					flush_workqueue(dev->sched_wq);
 
+					s5p_mfc_clock_off(dev);
 					mfc_debug(2, "power off\n");
 					s5p_mfc_power_off(dev);
 
@@ -2431,6 +2434,8 @@ static int s5p_mfc_release(struct file *file)
 						dev->is_support_smc = 0;
 					}
 #endif
+				} else {
+					s5p_mfc_clock_off(dev);
 				}
 
 

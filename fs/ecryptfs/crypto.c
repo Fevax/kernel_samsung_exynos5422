@@ -525,9 +525,33 @@ static int encrypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 	struct ablkcipher_request *req = NULL;
 	struct extent_crypt_result ecr;
 	int rc = 0;
-
+#ifdef CONFIG_SDP
+	int sig_len = 0;
+	unsigned char sig[ECRYPTFS_MAX_KEY_BYTES];
+#endif
 	BUG_ON(!crypt_stat || !crypt_stat->tfm
-		|| !(crypt_stat->flags & ECRYPTFS_STRUCT_INITIALIZED));
+	       || !(crypt_stat->flags & ECRYPTFS_STRUCT_INITIALIZED));
+#ifdef CONFIG_SDP
+	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET)) {
+		if(crypt_stat->flags & ECRYPTFS_DEK_SDP_ENABLED && 
+			crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE) {
+			rc = ecryptfs_get_sdp_dek(sig, &sig_len, crypt_stat);
+			if (rc) {
+				ecryptfs_printk(KERN_ERR, "Get encrypt key failed\n");
+				rc = -EINVAL;
+				goto out;
+			}
+		}
+		else{
+			memcpy(sig, crypt_stat->key, crypt_stat->key_size);
+			sig_len = crypt_stat->key_size;
+		}
+#if ECRYPTFS_DEK_DEBUG
+		ecryptfs_printk(KERN_DEBUG, "Key size [%zd]; key:\n", sig_len);
+		ecryptfs_dump_hex(sig, sig_len);
+#endif
+	}
+#endif
 	if (unlikely(ecryptfs_verbosity > 0)) {
 #ifndef CONFIG_SDP
 		ecryptfs_printk(KERN_DEBUG, "Key size [%zd]; key:\n",
@@ -552,8 +576,12 @@ static int encrypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 			extent_crypt_complete, &ecr);
 	/* Consider doing this once, when the file is opened */
 	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET)) {
+#ifdef CONFIG_SDP
+		rc = crypto_ablkcipher_setkey(crypt_stat->tfm, sig, sig_len);
+#else
 		rc = crypto_ablkcipher_setkey(crypt_stat->tfm, crypt_stat->key,
 					      crypt_stat->key_size);
+#endif
 		if (rc) {
 			ecryptfs_printk(KERN_ERR,
 					"Error setting key; rc = [%d]\n",
@@ -577,6 +605,9 @@ static int encrypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 	}
 out:
 	ablkcipher_request_free(req);
+#ifdef CONFIG_SDP
+	memset(sig, 0, ECRYPTFS_MAX_KEY_BYTES);
+#endif
 	return rc;
 }
 
@@ -669,34 +700,6 @@ int ecryptfs_encrypt_page(struct page *page)
 	crypt_stat =
 		&(ecryptfs_inode_to_private(ecryptfs_inode)->crypt_stat);
 	BUG_ON(!(crypt_stat->flags & ECRYPTFS_ENCRYPTED));
-
-#ifdef CONFIG_SDP
-	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET) ||
-			!(crypt_stat->flags & ECRYPTFS_KEY_VALID)) {
-		if((crypt_stat->flags & ECRYPTFS_DEK_SDP_ENABLED) &&
-			(crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE)) {
-			rc = ecryptfs_get_sdp_dek(crypt_stat);
-			if (rc) {
-				ecryptfs_printk(KERN_ERR, "%s Get SDP key failed\n", __func__);
-				goto out;
-			}
-			rc = ecryptfs_compute_root_iv(crypt_stat);
-			if (rc) {
-				ecryptfs_printk(KERN_ERR, "Error computing "
-						"the root IV\n");
-				goto out;
-			}
-		}
-	}
-#endif
-
-#if ECRYPTFS_DEK_DEBUG
-	ecryptfs_printk(KERN_ERR, "\tKEY [%zd]:\n", crypt_stat->key_size);
-	ecryptfs_dump_hex(crypt_stat->key, crypt_stat->key_size);
-	ecryptfs_printk(KERN_ERR, "\tIV [%zd]:\n", ECRYPTFS_MAX_IV_BYTES);
-	ecryptfs_dump_hex(crypt_stat->root_iv, ECRYPTFS_MAX_IV_BYTES);
-#endif
-
 	enc_extent_page = alloc_page(GFP_USER);
 	if (!enc_extent_page) {
 		rc = -ENOMEM;
@@ -805,34 +808,6 @@ int ecryptfs_decrypt_page(struct page *page)
 	crypt_stat =
 		&(ecryptfs_inode_to_private(ecryptfs_inode)->crypt_stat);
 	BUG_ON(!(crypt_stat->flags & ECRYPTFS_ENCRYPTED));
-
-#ifdef CONFIG_SDP
-	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET) ||
-			!(crypt_stat->flags & ECRYPTFS_KEY_VALID)) {
-		if((crypt_stat->flags & ECRYPTFS_DEK_SDP_ENABLED) &&
-			(crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE)) {
-			rc = ecryptfs_get_sdp_dek(crypt_stat);
-			if (rc) {
-				ecryptfs_printk(KERN_ERR, "%s Get SDP key failed\n", __func__);
-				goto out;
-			}
-			rc = ecryptfs_compute_root_iv(crypt_stat);
-			if (rc) {
-				ecryptfs_printk(KERN_ERR, "Error computing "
-						"the root IV\n");
-				goto out;
-			}
-		}
-	}
-#endif
-
-#if ECRYPTFS_DEK_DEBUG
-	ecryptfs_printk(KERN_ERR, "\tKEY [%zd]:\n", crypt_stat->key_size);
-	ecryptfs_dump_hex(crypt_stat->key, crypt_stat->key_size);
-	ecryptfs_printk(KERN_ERR, "\tIV [%zd]:\n", ECRYPTFS_MAX_IV_BYTES);
-	ecryptfs_dump_hex(crypt_stat->root_iv, ECRYPTFS_MAX_IV_BYTES);
-#endif
-
 	enc_extent_page = alloc_page(GFP_USER);
 	if (!enc_extent_page) {
 		rc = -ENOMEM;
@@ -893,14 +868,43 @@ static int decrypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 	struct ablkcipher_request *req = NULL;
 	struct extent_crypt_result ecr;
 	int rc = 0;
-
+#ifdef CONFIG_SDP
+	int sig_len = 0;
+	unsigned char sig[ECRYPTFS_MAX_KEY_BYTES];
+#endif
 	BUG_ON(!crypt_stat || !crypt_stat->tfm
 	       || !(crypt_stat->flags & ECRYPTFS_STRUCT_INITIALIZED));
+#ifdef CONFIG_SDP
+	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET)) {
+		memset(sig, 0, ECRYPTFS_MAX_KEY_BYTES);
+		if(crypt_stat->flags & ECRYPTFS_DEK_SDP_ENABLED &&
+			crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE) {
+			rc = ecryptfs_get_sdp_dek(sig, &sig_len, crypt_stat);
+			if (rc) {
+				ecryptfs_printk(KERN_ERR, "Get decrypt key failed\n");
+				rc = -EINVAL;
+				goto out;
+			}
+		}
+		else{
+			memcpy(sig, crypt_stat->key, crypt_stat->key_size);
+			sig_len = crypt_stat->key_size;
+		}
+#if ECRYPTFS_DEK_DEBUG
+		ecryptfs_printk(KERN_DEBUG, "Key size [%zd]; key:\n", sig_len);
+		ecryptfs_dump_hex(sig, sig_len);
+#endif
+	}
+#endif
+
+
 	if (unlikely(ecryptfs_verbosity > 0)) {
+#ifndef CONFIG_SDP
 		ecryptfs_printk(KERN_DEBUG, "Key size [%zd]; key:\n",
 				crypt_stat->key_size);
 		ecryptfs_dump_hex(crypt_stat->key,
 				  crypt_stat->key_size);
+#endif
 	}
 
 	init_completion(&ecr.completion);
@@ -918,8 +922,12 @@ static int decrypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 			extent_crypt_complete, &ecr);
 	/* Consider doing this once, when the file is opened */
 	if (!(crypt_stat->flags & ECRYPTFS_KEY_SET)) {
+#ifdef CONFIG_SDP
+		rc = crypto_ablkcipher_setkey(crypt_stat->tfm, sig, sig_len);
+#else
 		rc = crypto_ablkcipher_setkey(crypt_stat->tfm, crypt_stat->key,
 					      crypt_stat->key_size);
+#endif
 		if (rc) {
 			ecryptfs_printk(KERN_ERR,
 					"Error setting key; rc = [%d]\n",
@@ -943,6 +951,9 @@ static int decrypt_scatterlist(struct ecryptfs_crypt_stat *crypt_stat,
 	}
 out:
 	ablkcipher_request_free(req);
+#ifdef CONFIG_SDP
+	memset(sig, 0, ECRYPTFS_MAX_KEY_BYTES);
+#endif
 	return rc;
 
 }
@@ -1104,6 +1115,10 @@ int ecryptfs_compute_root_iv(struct ecryptfs_crypt_stat *crypt_stat)
 #else
 	char dst[MD5_DIGEST_SIZE];
 #endif
+#ifdef CONFIG_SDP
+	int sig_len = 0;
+	unsigned char sig[ECRYPTFS_MAX_KEY_BYTES];
+#endif
 	BUG_ON(crypt_stat->iv_bytes > MD5_DIGEST_SIZE);
 	BUG_ON(crypt_stat->iv_bytes <= 0);
 	if (!(crypt_stat->flags & ECRYPTFS_KEY_VALID)) {
@@ -1112,13 +1127,32 @@ int ecryptfs_compute_root_iv(struct ecryptfs_crypt_stat *crypt_stat)
 				"cannot generate root IV\n");
 		goto out;
 	}
+#ifdef CONFIG_SDP
+	if(crypt_stat->flags & ECRYPTFS_DEK_SDP_ENABLED &&
+		crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE) {
+		ecryptfs_printk(KERN_ERR, "Using SDP key for root_iv calculation\n");
+		rc = ecryptfs_get_sdp_dek(sig, &sig_len, crypt_stat);
+		if (rc) {
+			ecryptfs_printk(KERN_ERR, "Get decrypt key failed\n");
+			rc = -EINVAL;
+			goto out;
+			}
+#if defined(CONFIG_CRYPTO_FIPS) && !defined(CONFIG_FORCE_DISABLE_FIPS)
+		if (crypt_stat->mount_crypt_stat->flags & ECRYPTFS_ENABLE_CC)
+			rc = ecryptfs_calculate_sha256(dst, crypt_stat, sig, sig_len);
+		else
+#endif
+			rc = ecryptfs_calculate_md5(dst, crypt_stat, sig, sig_len);
+	} else
+#endif
+	{
 #if defined(CONFIG_CRYPTO_FIPS) && !defined(CONFIG_FORCE_DISABLE_FIPS)
 	if (crypt_stat->mount_crypt_stat->flags & ECRYPTFS_ENABLE_CC)
 		rc = ecryptfs_calculate_sha256(dst, crypt_stat, crypt_stat->key, crypt_stat->key_size);
 	else
 #endif
 		rc = ecryptfs_calculate_md5(dst, crypt_stat, crypt_stat->key, crypt_stat->key_size);
-
+	}
 	if (rc) {
 		ecryptfs_printk(KERN_WARNING, "Error attempting to compute "
 				"MD5 while generating root IV\n");
@@ -1130,6 +1164,9 @@ out:
 		memset(crypt_stat->root_iv, 0, crypt_stat->iv_bytes);
 		crypt_stat->flags |= ECRYPTFS_SECURITY_WARNING;
 	}
+#ifdef CONFIG_SDP
+	memset(sig, 0, ECRYPTFS_MAX_KEY_BYTES);
+#endif
 	return rc;
 }
 
@@ -1902,14 +1939,6 @@ int ecryptfs_read_metadata(struct dentry *ecryptfs_dentry)
 		rc = ecryptfs_read_headers_virt(page_virt, crypt_stat,
 						ecryptfs_dentry,
 						ECRYPTFS_VALIDATE_HEADER_SIZE);
-#ifdef CONFIG_SDP
-	if ((rc) && crypt_stat->flags & ECRYPTFS_DEK_IS_SENSITIVE)
-		/*
-		 * metadata is not in the file header, SDP sensitive file.
-		 * Don't check xattr region. we don't put info there.
-		 */
-		goto out;
-#endif
 	if (rc) {
 		/* metadata is not in the file header, so try xattrs */
 		memset(page_virt, 0, PAGE_CACHE_SIZE);
@@ -2438,7 +2467,6 @@ ecryptfs_decode_from_filename(unsigned char *dst, size_t *dst_size,
 			break;
 		case 2:
 			dst[dst_byte_offset++] |= (src_byte);
-			dst[dst_byte_offset] = 0;
 			current_bit_offset = 0;
 			break;
 		}

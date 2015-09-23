@@ -84,7 +84,7 @@ static inline int spi_send(struct modem_boot_spi *boot, const char *buff,
 }
 
 static int spi_boot_write(struct modem_boot_spi *boot, const char *addr,
-			  const u32 len)
+			  const long len)
 {
 	int ret = 0;
 	char *buff = NULL;
@@ -93,7 +93,7 @@ static int spi_boot_write(struct modem_boot_spi *boot, const char *addr,
 
 	buff = kzalloc(len, GFP_KERNEL);
 	if (!buff) {
-		mif_err("ERR! kzalloc(%d) fail\n", len);
+		mif_err("ERR! kzalloc(%ld) fail\n", len);
 		ret = -ENOMEM;
 		goto exit;
 	}

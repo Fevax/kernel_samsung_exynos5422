@@ -8539,6 +8539,7 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 #endif /* ROAM_CHANNEL_CACHE */
 
 	wiphy = bcmcfg_to_wiphy(cfg);
+	if( wiphy == NULL ) printf("%s: wiphy is NULL\n",__FUNCTION__);
 
 	ssid = (struct wlc_ssid *)wl_read_prof(cfg, ndev, WL_PROF_SSID);
 	curbssid = wl_read_prof(cfg, ndev, WL_PROF_BSSID);
@@ -8557,7 +8558,7 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 	}
 	bi = (struct wl_bss_info *)(cfg->extra_buf + 4);
 	channel = bi->ctl_ch ? bi->ctl_ch :
-		CHSPEC_CHANNEL(wl_chspec_driver_to_host(bi->chanspec));
+			wf_chspec_ctlchan(wl_chspec_driver_to_host(bi->chanspec));
 	wl_update_prof(cfg, ndev, NULL, &channel, WL_PROF_CHAN);
 
 	if (!bss) {
@@ -8583,7 +8584,12 @@ static s32 wl_update_bss_info(struct bcm_cfg80211 *cfg, struct net_device *ndev,
 		band = (channel <= CH_MAX_2G_CHANNEL) ? IEEE80211_BAND_2GHZ : IEEE80211_BAND_5GHZ;
 		freq = ieee80211_channel_to_frequency(channel, band);
 #endif
+		printf("%s: ctrl ch %d, freq %d\n",__FUNCTION__,channel,freq);
 		cur_channel = ieee80211_get_channel(wiphy, freq);
+		if (unlikely(cur_channel)) {
+			WL_ERR(("ieee80211_get_channel error\n"));
+			goto update_bss_info_out;
+		}
 		bss->channel = cur_channel;
 #endif /* ROAM_CHANNEL_CACHE */
 #if defined(WL_CFG80211_P2P_DEV_IF)
@@ -11852,10 +11858,6 @@ wl_tdls_event_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 	struct net_device *ndev = NULL;
 	u32 reason = ntoh32(e->reason);
 	s8 *msg = NULL;
-#ifdef CUSTOMER_HW4
-	s32 ret = 0;
-	bool auto_on = true;
-#endif /* CUSTOMER_HW4 */
 
 	ndev = cfgdev_to_wlc_ndev(cfgdev, cfg);
 
@@ -11864,33 +11866,16 @@ wl_tdls_event_handler(struct bcm_cfg80211 *cfg, bcm_struct_cfgdev *cfgdev,
 		msg = " TDLS PEER DISCOVERD ";
 		break;
 	case WLC_E_TDLS_PEER_CONNECTED :
-#ifdef PCIE_FULL_DONGLE
-		dhd_tdls_update_peer_info(ndev, TRUE, (uint8 *)&e->addr.octet[0]);
-#endif /* PCIE_FULL_DONGLE */
 		msg = " TDLS PEER CONNECTED ";
 		break;
 	case WLC_E_TDLS_PEER_DISCONNECTED :
-#ifdef PCIE_FULL_DONGLE
-		dhd_tdls_update_peer_info(ndev, FALSE, (uint8 *)&e->addr.octet[0]);
-#endif /* PCIE_FULL_DONGLE */
 		msg = "TDLS PEER DISCONNECTED ";
 		break;
-#ifdef CUSTOMER_HW4
-	default :
-		auto_on = false;
-#endif /* CUSTOMER_HW4 */
 	}
 	if (msg) {
 		WL_ERR(("%s: " MACDBG " on %s ndev\n", msg, MAC2STRDBG((u8*)(&e->addr)),
 			(bcmcfg_to_prmry_ndev(cfg) == ndev) ? "primary" : "secondary"));
 	}
-#ifdef CUSTOMER_HW4
-	if (auto_on) {
-		ret = dhd_tdls_enable(ndev, true, true, NULL);
-		if (ret < 0)
-			WL_ERR(("enable tdls_auto_op failed. %d\n", ret));
-	}
-#endif /* CUSTOMER_HW4 */
 	return 0;
 
 }
@@ -11911,24 +11896,15 @@ wl_cfg80211_tdls_oper(struct wiphy *wiphy, struct net_device *dev,
 		memcpy(&info.ea, peer, ETHER_ADDR_LEN);
 	switch (oper) {
 	case NL80211_TDLS_DISCOVERY_REQ:
-#ifdef CUSTOMER_HW4
-		ret = dhd_tdls_reset_manual((dhd_pub_t *)(cfg->pub), dev);
-#else /* !CUSTOMER_HW4 */
 		/* turn on TDLS */
 		ret = dhd_tdls_enable(dev, true, false, NULL);
-#endif /* CUSTOMER_HW4 */
 		if (ret < 0)
 			return ret;
 		info.mode = TDLS_MANUAL_EP_DISCOVERY;
 		break;
 	case NL80211_TDLS_SETUP:
 		/* auto mode on */
-#ifdef CUSTOMER_HW4
-		ret = dhd_tdls_reset_manual((dhd_pub_t *)(cfg->pub), dev);
-		info.mode = TDLS_MANUAL_EP_CREATE;
-#else /* !CUSTOMER_HW4 */
 		ret = dhd_tdls_enable(dev, true, true, (struct ether_addr *)peer);
-#endif /* CUSTOMER_HW4 */
 		if (ret < 0)
 			return ret;
 		break;

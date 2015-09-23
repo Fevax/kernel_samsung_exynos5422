@@ -44,9 +44,9 @@ static inline void print_pm_event(struct modem_link_pm *pm, enum pm_event event)
 	PM {cp2ap_wakeup:ap2cp_wakeup:cp2ap_status:ap2cp_status}{event:state}
 	   <CALLER>
 	*/
-	pr_info("mif: %s: PM {%d:%d:%d:%d}{%s:%s}\n", pm->link_name,
+	mif_info("%s: PM {%d:%d:%d:%d}{%s:%s} <%pf>\n", pm->link_name,
 		cp2ap_wakeup, ap2cp_wakeup, cp2ap_status, ap2cp_status,
-		pm_event2str(event), pm_state2str(pm->fsm.state));
+		pm_event2str(event), pm_state2str(pm->fsm.state), CALLER);
 }
 
 static inline void print_pm_fsm(struct modem_link_pm *pm)
@@ -66,13 +66,13 @@ static inline void print_pm_fsm(struct modem_link_pm *pm)
 	PM {cp2ap_wakeup:ap2cp_wakeup:cp2ap_status:ap2cp_status}\
 	   {event:current_state->next_state} <CALLER>
 	*/
-	pr_info("mif: %s: PM {%d:%d:%d:%d}{%s:%s->%s}\n", pm->link_name,
+	mif_info("%s: PM {%d:%d:%d:%d}{%s:%s->%s} <%pf>\n", pm->link_name,
 		cp2ap_wakeup, ap2cp_wakeup, cp2ap_status, ap2cp_status,
 		pm_event2str(pm->fsm.event), pm_state2str(pm->fsm.prev_state),
-		pm_state2str(pm->fsm.state));
+		pm_state2str(pm->fsm.state), CALLER);
 
 	if (wdog->msg[0]) {
-		pr_err("mif: %s\n", wdog->msg);
+		mif_err("%s\n", wdog->msg);
 		wdog->msg[0] = 0;
 	}
 }
@@ -154,10 +154,8 @@ static inline void start_pm_wdog(struct modem_link_pm *pm, enum pm_state state,
 	wdog->w_state = w_state;
 	wdog->w_event = w_event;
 
-#if 0
 	snprintf(wdog->msg, MAX_STR_LEN, "%s: PM WDOG wait for {%s@%s}",
 		 pm->link_name, pm_event2str(w_event), pm_state2str(state));
-#endif
 
 	mif_add_timer(timer, expire, pm_wdog_bark, (unsigned long)wdog);
 }
@@ -174,7 +172,7 @@ static inline void stop_pm_wdog(struct modem_link_pm *pm, enum pm_state state,
 			del_timer(timer);
 
 #ifdef DEBUG_MODEM_IF
-		mif_debug("%s: PM WDOG kicked by {%s@%s}\n",
+		mif_err("%s: PM WDOG kicked by {%s@%s}\n",
 			pm->link_name, pm_event2str(event),
 			pm_state2str(state));
 #endif
@@ -480,8 +478,7 @@ static void run_pm_fsm(struct modem_link_pm *pm, enum pm_event event)
 		break;
 
 	case PM_STATE_MOUNTING:
-		if (event == PM_EVENT_LINK_MOUNTED
-			|| event == PM_EVENT_CP2AP_STATUS_HIGH) {
+		if (event == PM_EVENT_LINK_MOUNTED) {
 			n_state = PM_STATE_ACTIVE;
 			stop_pm_wdog(pm, c_state, event);
 		} else if (event == PM_EVENT_WDOG_TIMEOUT) {

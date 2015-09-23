@@ -85,6 +85,10 @@
 		channel = <1>;
 		bypass-smu;
 		clock-gate;
+		caps-control;
+		use-fine-tuning;
+		ignore-phase = <(1 << 7)>;
+		sw-timeout = <1000>;
 		enable-cclk-on-suspend;
 		fixed_volt;
 		supports-highspeed;
@@ -545,6 +549,8 @@
 			cypress,scl-gpio = <&gpd1 5 0>;
 			cypress,irq-gpio = <&gpy7 1 1>;
 			cypress,i2c-gpio = "true";
+			cypress,ic-stabilizing-time = <50>;
+			cypress,multi-touchkey-fw-version = <0x1c>;
 		};
 	};
 
@@ -751,7 +757,7 @@
 			pinctrl-names = "default";
 			pinctrl-0 = <&mfd_irq &vibetonz_pwm>;
 			max77804,irq-gpio = <&gpx1 4 0>;
-			max77804,wc-irq-gpio = <0>;
+			max77804,irqf-trigger = "falling_edge";
 			max77804,wakeup;
 
 			regulators {
@@ -836,7 +842,7 @@
 		disp_pcd: disp_pcd {
 			samsung,pins = "gpg0-6";
 			samsung,pin-function = <0>;
-			samsung,pin-pud = <3>;
+			samsung,pin-pud = <1>;
 		};
 	};
 
@@ -855,7 +861,7 @@
 		oled-id-gpio = <&gpd1 3 0x0>;
 		oled-pcd-gpio = <&gpg0 6 0x0>;
 		oled-errfg-gpio = <&gpb0 1 0x0>;
-		lcd_info = <&s6e3ha0 &s6e3fa2>;
+		lcd_info = <&s6e3fa2>;
 		gpios = <&gpd1 7 0xf>;
 
 		pinctrl-names = "default", "turnon_tes", "turnoff_tes";
@@ -1024,23 +1030,13 @@
 			/* lp rx timeout 0 ~ 0xffff */
 			rx_timeout = <0xffff>;
 		};
-		s6e3ha0: s6e3ha0_wqhd {
-			mode = <1>;
-			resolution = <1440 2560>;
-			size = <65 115>;
-			timing,refresh = <30>;
-			timing,h-porch = <10 10 10>;
-			timing,v-porch = <3 4 1>;
-			timing,dsi-hs-clk = <1104>;
-			timing,dsi-escape-clk = <19>;
-		};
 		s6e3fa2: s6e3fa2_fhd {
-			mode = <1>;
+			mode = <0>;
 			resolution = <1080 1920>;
 			size = <65 115>;
 			timing,refresh = <60>;
 			timing,h-porch = <10 10 10>;
-			timing,v-porch = <3 4 1>;
+			timing,v-porch = <4 3 1>;
 			timing,dsi-hs-clk = <896>;
 			timing,dsi-escape-clk = <19>;
 			mic = <1>;
@@ -1096,6 +1092,8 @@
 
 		scenario = <0>;
 		mclk_ch = <0>;
+		sensor_id = <10>;
+
 		gpio_reset = <&gpe0 4 0x1>;
 		gpios_cam_en = <&gpd1 6 0x1>; /* MAIN_CAM_A2.8V_EN */
 		gpios_comp_en = <&gpe0 5 0x1>; /* COMP_EN */
@@ -1186,9 +1184,9 @@
 			rear_preview_fhd_mif = <633000>; /* L2 */
 			rear_preview_fhd_i2c = <0>;
 
-			rear_preview_whd_int = <600000>; /* L0 */
-			rear_preview_whd_cam = <666000>; /* L0 */
-			rear_preview_whd_mif = <825000>; /* L0 */
+			rear_preview_whd_int = <500000>; /* L1 */
+			rear_preview_whd_cam = <444000>; /* L2 */
+			rear_preview_whd_mif = <633000>; /* L2 */
 			rear_preview_whd_i2c = <0>;
 
 			rear_preview_uhd_int = <600000>; /* L0 */
@@ -1205,6 +1203,11 @@
 			rear_camcording_fhd_cam = <444000>; /* L2 */
 			rear_camcording_fhd_mif = <543000>; /* L3 */
 			rear_camcording_fhd_i2c = <0>;
+
+			rear_camcording_whd_int = <500000>; /* L1 */
+			rear_camcording_whd_cam = <444000>; /* L2 */
+			rear_camcording_whd_mif = <633000>; /* L2 */
+			rear_camcording_whd_i2c = <0>;
 
 			rear_camcording_uhd_int = <600000>; /* L0 */
 			rear_camcording_uhd_cam = <666000>; /* L0 */
@@ -1520,21 +1523,22 @@
 
 		booster_key@1 {
 			input_booster,label = "TOUCH";
-			input_booster,code = <0x232>;
+			input_booster,type = <0>;	/* BOOSTER_DEVICE_TOUCH */
 
 			input_booster,levels = <1 2 3 4 5 9 10>;
 
 			/* Frequency table */
 			/* for level	:		1_Head, 2_Tail, 3_Head, 4_Head/Tail, 5_Head, 9_Head, 9_Tail */
 			input_booster,cpu_freqs = <1600000 0 0 0 1200000 1900000 1600000>;
+			input_booster,hmp_boost = <1 0 0 0 1 1 1>;
 			input_booster,kfc_freqs = <1000000 1200000 1300000 1300000 800000 1300000 1300000>;
 			input_booster,mif_freqs = <633000 413000 413000 633000 633000 825000 825000>;
 			input_booster,int_freqs = <333000 110000 111000 111000 333000 400000 400000>;
 
 			/* Time table */
-			input_booster,chg_times = <130 130 130 130 100 500 0>;
-			input_booster,off_times = <500 500 500 200 500 1000 0>;
-			input_booster,pri_times = <0 0 0 0 40 0 0>;
+			input_booster,head_times = <130 130 130 130 100 500 0>;
+			input_booster,tail_times = <500 500 500 200 500 1000 0>;
+			input_booster,phase_times = <0 0 0 0 40 0 0>;
 		};
 		/* If you need to add new key type, add it this position */
 	};

@@ -400,7 +400,14 @@ static bool sec_bat_check(struct sec_battery_info *battery)
 	bool ret;
 	ret = true;
 
-	if (battery->factory_mode || battery->is_jig_on) {
+	if (battery->pdata->check_jig_status) {
+		if (battery->factory_mode
+		    || battery->pdata->check_jig_status()) {
+			dev_dbg(battery->dev, "%s: No need to check in factory mode\n",
+				__func__);
+			return ret;
+		}
+	} else if (battery->factory_mode) {
 		dev_dbg(battery->dev, "%s: No need to check in factory mode\n",
 			__func__);
 		return ret;
@@ -609,9 +616,16 @@ static bool sec_bat_ovp_uvlo(struct sec_battery_info *battery)
 {
 	int health;
 
-	if (battery->factory_mode || battery->is_jig_on) {
-		dev_dbg(battery->dev,
-			"%s: No need to check in factory mode\n",
+	if (battery->pdata->check_jig_status) {
+		if (battery->factory_mode
+		    || battery->pdata->check_jig_status()) {
+			dev_dbg(battery->dev,
+				"%s: No need to check in factory mode\n",
+				__func__);
+			return false;
+		}
+	} else if (battery->factory_mode) {
+		dev_dbg(battery->dev, "%s: No need to check in factory mode\n",
 			__func__);
 		return false;
 	} else if ((battery->status == POWER_SUPPLY_STATUS_FULL) &&
@@ -738,7 +752,6 @@ static bool sec_bat_voltage_check(struct sec_battery_info *battery)
 
 	if ((battery->status == POWER_SUPPLY_STATUS_FULL) && \
 		battery->is_recharging) {
-		value.intval = 0;
 		psy_do_property(battery->pdata->fuelgauge_name, get,
 			POWER_SUPPLY_PROP_CAPACITY, value);
 		if (value.intval <
@@ -2172,10 +2185,11 @@ static void sec_bat_monitor_work(
 #if defined(CONFIG_BATTERY_SWELLING)
 	sec_bat_swelling_check(battery, battery->temperature);
 
-	if (battery->swelling_mode && !battery->swelling_block)
+	if (battery->swelling_mode)
 		sec_bat_swelling_fullcharged_check(battery);
 	else
 #endif
+
 	/* 5. full charging check */
 	sec_bat_fullcharged_check(battery);
 
@@ -3614,14 +3628,13 @@ static int sec_bat_cable_check(struct sec_battery_info *battery,
 				muic_attached_dev_t attached_dev)
 {
 	int current_cable_type = -1;
-	union power_supply_propval val;
 
 	pr_info("[%s]ATTACHED(%d)\n", __func__, attached_dev);
+	battery->is_jig_on = false;
 
 	switch (attached_dev)
 	{
 	case ATTACHED_DEV_JIG_UART_OFF_MUIC:
-	case ATTACHED_DEV_JIG_UART_ON_MUIC:
 		battery->is_jig_on = true;
 		break;
 	case ATTACHED_DEV_SMARTDOCK_MUIC:
@@ -3690,10 +3703,6 @@ static int sec_bat_cable_check(struct sec_battery_info *battery,
 		pr_err("%s: invalid type for charger:%d\n",
 			__func__, attached_dev);
 	}
-
-	if (battery->is_jig_on)
-		psy_do_property(battery->pdata->fuelgauge_name, set,
-			POWER_SUPPLY_PROP_ENERGY_NOW, val);
 
 	return current_cable_type;
 
@@ -3771,8 +3780,7 @@ static int batt_handle_notification(struct notifier_block *nb,
 			__func__, cable_type, battery->wc_status,
 			battery->wire_status);
 
-	if ((attached_dev == ATTACHED_DEV_OTG_MUIC) ||
-	    (attached_dev == ATTACHED_DEV_HMT_MUIC)) {
+	if (attached_dev == ATTACHED_DEV_OTG_MUIC) {
 		if (!strcmp(cmd, "ATTACH")) {
 			value.intval = true;
 			battery->cable_type = cable_type;
@@ -4440,7 +4448,6 @@ static int __devinit sec_battery_probe(struct platform_device *pdev)
 	battery->status = POWER_SUPPLY_STATUS_DISCHARGING;
 	battery->health = POWER_SUPPLY_HEALTH_GOOD;
 	battery->present = true;
-	battery->is_jig_on = false;
 
 	battery->polling_count = 1;	/* initial value = 1 */
 	battery->polling_time = pdata->polling_time[

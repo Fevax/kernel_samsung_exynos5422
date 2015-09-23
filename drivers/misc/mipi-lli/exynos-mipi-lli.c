@@ -215,7 +215,7 @@ static int exynos_lli_get_clk_info(struct mipi_lli *lli)
 		IS_ERR(clks->mout_phyclk_lli_rx0_symbol_user) ||
 		IS_ERR(clks->phyclk_lli_rx0_symbol)
 	) {
-		dev_err(lli->dev, "exynos_lli_get_clks - failed\n");
+		lli_err(lli->dev, "exynos_lli_get_clks - failed\n");
 		return -ENODEV;
 	}
 
@@ -285,7 +285,7 @@ static int exynos_lli_setting(struct mipi_lli *lli)
 
 	remap_addr = exynos_lli_cal_remap(lli->phy_addr, lli->shdmem_size);
 	if (!remap_addr) {
-		dev_err(lli->dev, "remap calculation error\n");
+		lli_err(lli->dev, "remap calculation error\n");
 		return -EINVAL;
 	}
 
@@ -326,7 +326,7 @@ static int exynos_lli_setting(struct mipi_lli *lli)
 	writel(2, lli->regs + EXYNOS_PA_PA_DBG_RX_LATCH_MODE);
 
 	writel(0x40, lli->regs + EXYNOS_PA_NACK_RTT);
-	writel(0x0, lli->regs + EXYNOS_PA_MK0_INSERTION_ENABLE);
+	writel(0x1, lli->regs + EXYNOS_PA_MK0_INSERTION_ENABLE);
 #if defined(CONFIG_UMTS_MODEM_SS300)
 	writel((128<<0) | (15<<8) | (1<<12), lli->regs + EXYNOS_PA_MK0_CONTROL);
 #else
@@ -361,7 +361,7 @@ static int exynos_lli_setting(struct mipi_lli *lli)
 
 	writel(0x1000, lli->regs + EXYNOS_PA_WORSTCASE_RTT);
 
-	dev_dbg(lli->dev, "MIPI LLI is initialized\n");
+	lli_err(lli->dev, "MIPI LLI is initialized\n");
 
 	return 0;
 }
@@ -395,7 +395,7 @@ static int exynos_lli_link_startup_mount(struct mipi_lli *lli)
 			     INTR_MPHY_HIBERN8_EXIT_DONE,
 			     1000);
 		if (ret) {
-			dev_err(lli->dev, "HIBERN8 Exit Failed\n");
+			lli_err(lli->dev, "HIBERN8 Exit Failed\n");
 			return ret;
 		}
 
@@ -749,11 +749,11 @@ static int exynos_lli_loopback_test(struct mipi_lli *lli)
 
 	writel(0x1, lli->regs + EXYNOS_PA_MPHY_OV_TM_ENABLE);
 	uval = readl(phy->loc_regs + (0x23*4));
-	dev_err(lli->dev, "LB error : 0x%x\n", uval);
+	lli_err(lli->dev, "LB error : 0x%x\n", uval);
 	if (uval == 0x24)
-		dev_err(lli->dev, "PWM loopbacktest is Passed!!");
+		lli_err(lli->dev, "PWM loopbacktest is Passed!!");
 	else
-		dev_err(lli->dev, "PWM loopbacktest is Failed!!");
+		lli_err(lli->dev, "PWM loopbacktest is Failed!!");
 
 	writel(0x0, lli->regs + EXYNOS_PA_MPHY_OV_TM_ENABLE);
 
@@ -761,7 +761,7 @@ static int exynos_lli_loopback_test(struct mipi_lli *lli)
 	uval = readl(phy->loc_regs + (0x26*4)); /* o_pll_lock[7] */
 	writel(0x0, lli->regs + EXYNOS_PA_MPHY_CMN_ENABLE);
 
-	dev_err(lli->dev, "uval : %d\n", uval);
+	lli_err(lli->dev, "uval : %d\n", uval);
 
 	return 0;
 }
@@ -797,11 +797,11 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 	status = readl(lli->regs + EXYNOS_DME_LLI_INTR_STATUS);
 
 	if (status & INTR_SW_RESET_DONE) {
-		dev_err(dev, "SW_RESET_DONE ++\n");
+		lli_err(dev, "SW_RESET_DONE ++\n");
 		exynos_lli_setting(lli);
 
 		if (status & INTR_RESET_ON_ERROR_DETECTED) {
-			dev_err(dev, "LLI is wating for mount after LINE-RESET..\n");
+			lli_err(dev, "LLI is wating for mount after LINE-RESET..\n");
 			atomic_set(&lli->state, LLI_WAITFORMOUNT);
 		}
 
@@ -810,7 +810,7 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
  	}
 
 	if (status & INTR_MPHY_HIBERN8_EXIT_DONE) {
-		dev_info(dev, "HIBERN8_EXIT_DONE: rx=%x, tx=%x\n",
+		lli_info(dev, "HIBERN8_EXIT_DONE: rx=%x, tx=%x\n",
 				readl(phy->loc_regs + PHY_RX_FSM_STATE(0)),
 				readl(phy->loc_regs + PHY_TX_FSM_STATE(0)));
 		mdelay(1);
@@ -818,24 +818,24 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 	}
 
 	if (status & INTR_MPHY_HIBERN8_ENTER_DONE)
-		dev_info(dev, "HIBERN8_ENTER_DONE\n");
+		lli_info(dev, "HIBERN8_ENTER_DONE\n");
 
 	if (status & INTR_PA_PLU_DETECTED)
-		dev_info(dev, "PLU_DETECT\n");
+		lli_info(dev, "PLU_DETECT\n");
 
 	if (status & INTR_PA_PLU_DONE) {
-		dev_info(dev, "PLU_DONE\n");
+		lli_info(dev, "PLU_DONE\n");
 
 		if (lli->modem_info.automode)
 			exynos_mipi_lli_set_automode(lli, true);
 	}
 
 	if ((status & INTR_RESET_ON_ERROR_DETECTED)) {
-		dev_err(dev, "Error detected ++ roe_cnt = %d\n", ++roe_cnt);
+		lli_err(dev, "Error detected ++ roe_cnt = %d\n", ++roe_cnt);
 	}
 
 	if (status & INTR_RESET_ON_ERROR_SENT) {
-		dev_err(dev, "Error sent ++ roe_cnt = %d\n", ++roe_cnt);
+		lli_err(dev, "Error sent ++ roe_cnt = %d\n", ++roe_cnt);
 		exynos_lli_soft_reset(lli);
 		return IRQ_HANDLED;
 	}
@@ -864,17 +864,17 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 	}
 
 	if (status & INTR_DL_ERROR_INDICATION) {
-		dev_err(dev, "DL_REASON %x\n",
+		lli_err(dev, "DL_REASON %x\n",
 			readl(lli->regs + EXYNOS_DME_LLI_DL_INTR_REASON));
 	}
 
 	if (status & INTR_TL_ERROR_INDICATION) {
-		dev_err(dev, "TL_REASON %x\n",
+		lli_err(dev, "TL_REASON %x\n",
 			readl(lli->regs + EXYNOS_DME_LLI_TL_INTR_REASON));
 	}
 
 	if (status & INTR_IAL_ERROR_INDICATION) {
-		dev_err(dev, "IAL_REASON0 %x, REASON1 %x\n",
+		lli_err(dev, "IAL_REASON0 %x, REASON1 %x\n",
 			readl(lli->regs + EXYNOS_DME_LLI_IAL_INTR_REASON0),
 			readl(lli->regs + EXYNOS_DME_LLI_IAL_INTR_REASON1));
 	}
@@ -897,7 +897,7 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 			is_first = false;
 		}
 
-		dev_err(dev, "rx=%x, tx=%x, afc=%x, status=%x, pa_err=%x\n"
+		lli_err(dev, "rx=%x, tx=%x, afc=%x, status=%x, pa_err=%x\n"
 				,rx_fsm_state, tx_fsm_state, afc_val,
 				csa_status, pa_err_cnt);
 
@@ -910,17 +910,17 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 				if (credit)
 					break;
 			}
-			dev_err(dev, "waiting %dus for CREDITS: tx=%x, rx=%x\n",
+			lli_err(dev, "waiting %dus for CREDITS: tx=%x, rx=%x\n",
 					udelay,
 					readl(phy->loc_regs + PHY_RX_FSM_STATE(0)),
 					readl(phy->loc_regs + PHY_TX_FSM_STATE(0)));
 
 			if (!credit) {
-				dev_err(dev, "ERR: Mount failed : %d\n",
+				lli_err(dev, "ERR: Mount failed : %d\n",
 						++mnt_fail_cnt);
 				mipi_lli_debug_info();
 				writel(status, lli->regs + EXYNOS_DME_LLI_INTR_STATUS);
-				dev_err(dev, "DUMP: ok:%d fail:%d roe:%d",
+				lli_err(dev, "DUMP: ok:%d fail:%d roe:%d",
 						mnt_cnt, mnt_fail_cnt, roe_cnt);
 				return IRQ_HANDLED;
 			}
@@ -929,7 +929,7 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 
 		atomic_set(&lli->state, LLI_MOUNTED);
 		atomic_inc(&lli->mnt_cnt);
-		dev_err(dev, "Mount (ok:%d fail:%d roe:%d pa_err:%d)\n",
+		lli_err(dev, "Mount (ok:%d fail:%d roe:%d pa_err:%d)\n",
 				++mnt_cnt, mnt_fail_cnt, roe_cnt, pa_err_cnt);
 
 		if (pm_svc && pm_svc->mount_cb)
@@ -942,7 +942,7 @@ static irqreturn_t exynos_mipi_lli_irq(int irq, void *_dev)
 		if (!pm_svc || !pm_svc->unmount_cb)
 			exynos_lli_init(lli);
 
-		dev_err(dev, "Unmount\n");
+		lli_err(dev, "Unmount\n");
 
 		if (pm_svc && pm_svc->unmount_cb)
 			pm_svc->unmount_cb(pm_svc->owner);
@@ -964,17 +964,17 @@ int mipi_lli_get_setting(struct mipi_lli *lli)
 
 	modem_name = of_get_property(lli_node, "modem-name", NULL);
 	if (!modem_name) {
-		dev_err(lli->dev, "parsing err : modem-name node\n");
+		lli_err(lli->dev, "parsing err : modem-name node\n");
 		goto parsing_err;
 	}
 	modem_node = of_get_child_by_name(lli_node, "modems");
 	if (!modem_node) {
-		dev_err(lli->dev, "parsing err : modems node\n");
+		lli_err(lli->dev, "parsing err : modems node\n");
 		goto parsing_err;
 	}
 	modem_node = of_get_child_by_name(modem_node, modem_name);
 	if (!modem_node) {
-		dev_err(lli->dev, "parsing err : modem node\n");
+		lli_err(lli->dev, "parsing err : modem node\n");
 		goto parsing_err;
 	}
 
@@ -995,7 +995,7 @@ int mipi_lli_get_setting(struct mipi_lli *lli)
 		lli->modem_info.scrambler = false;
 
 parsing_err:
-	dev_err(lli->dev, "modem_name:%s, scrambler:%d, automode:%d\n",
+	lli_err(lli->dev, "modem_name:%s, scrambler:%d, automode:%d\n",
 			modem_name,
 			lli->modem_info.scrambler,
 			lli->modem_info.automode);
@@ -1016,63 +1016,63 @@ static int exynos_mipi_lli_probe(struct platform_device *pdev)
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
-		dev_err(dev, "cannot find register resource 0\n");
+		lli_err(dev, "cannot find register resource 0\n");
 		return -ENXIO;
 	}
 
 	regs = devm_request_and_ioremap(dev, res);
 	if (!regs) {
-		dev_err(dev, "cannot request_and_map registers\n");
+		lli_err(dev, "cannot request_and_map registers\n");
 		return -EADDRNOTAVAIL;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 1);
 	if (!res) {
-		dev_err(dev, "cannot find register resource 1\n");
+		lli_err(dev, "cannot find register resource 1\n");
 		return -ENXIO;
 	}
 
 	remote_regs = devm_request_and_ioremap(dev, res);
 	if (!regs) {
-		dev_err(dev, "cannot request_and_map registers\n");
+		lli_err(dev, "cannot request_and_map registers\n");
 		return -EADDRNOTAVAIL;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 2);
 	if (!res) {
-		dev_err(dev, "cannot find register resource 2\n");
+		lli_err(dev, "cannot find register resource 2\n");
 		return -ENXIO;
 	}
 
 	sysregs = devm_request_and_ioremap(dev, res);
 	if (!regs) {
-		dev_err(dev, "cannot request_and_map registers\n");
+		lli_err(dev, "cannot request_and_map registers\n");
 		return -EADDRNOTAVAIL;
 	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 3);
 	if (!res) {
-		dev_err(dev, "cannot find register resource 3\n");
+		lli_err(dev, "cannot find register resource 3\n");
 		return -ENXIO;
 	}
 
 	pmuregs = devm_request_and_ioremap(dev, res);
 	if (!pmuregs) {
-		dev_err(dev, "cannot request_and_map registers\n");
+		lli_err(dev, "cannot request_and_map registers\n");
 		return -EADDRNOTAVAIL;
 	}
 
 	/* Request LLI IRQ */
 	irq = platform_get_irq(pdev, 0);
 	if (irq < 0) {
-		dev_err(dev, "no irq specified\n");
+		lli_err(dev, "no irq specified\n");
 		return -EBUSY;
 	}
 
 	/* Request Signal IRQ */
 	irq_sig = platform_get_irq(pdev, 1);
 	if (irq < 0) {
-		dev_err(dev, "no irq specified\n");
+		lli_err(dev, "no irq specified\n");
 		return -EBUSY;
 	}
 
@@ -1100,15 +1100,15 @@ static int exynos_mipi_lli_probe(struct platform_device *pdev)
 	if (node) {
 		ret = of_platform_populate(node, NULL, NULL, dev);
 		if (ret)
-			dev_err(dev, "failed to add mphy\n");
+			lli_err(dev, "failed to add mphy\n");
 	} else {
-		dev_err(dev, "no device node, failed to add mphy\n");
+		lli_err(dev, "no device node, failed to add mphy\n");
 		ret = -ENODEV;
 	}
 
 	lli->mphy = exynos_get_mphy();
 	if (!lli->mphy) {
-		dev_err(dev, "failed get mphy\n");
+		lli_err(dev, "failed get mphy\n");
 		return -ENODEV;
 	}
 
@@ -1128,12 +1128,12 @@ static int exynos_mipi_lli_probe(struct platform_device *pdev)
 
 	ret = clk_set_rate(dout_aclk_cpif_200, 100000000);
 	if (!ret)
-		dev_err(dev, "failed clk_set_rate on dout_aclk_cpif_200 to 100000000");
+		lli_err(dev, "failed clk_set_rate on dout_aclk_cpif_200 to 100000000");
 
-	dev_info(dev, "dout_aclk_cpif_200 = %ld\n", dout_aclk_cpif_200->rate);
-	dev_info(dev, "dout_mif_pre= %ld\n", dout_mif_pre->rate);
+	lli_err(dev, "dout_aclk_cpif_200 = %ld\n", dout_aclk_cpif_200->rate);
+	lli_err(dev, "dout_mif_pre= %ld\n", dout_mif_pre->rate);
 
-	dev_info(dev, "Registered MIPI-LLI interface\n");
+	lli_info(dev, "Registered MIPI-LLI interface\n");
 
 	return ret;
 }

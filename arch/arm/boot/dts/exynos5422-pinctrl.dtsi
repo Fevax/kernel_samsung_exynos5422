@@ -217,35 +217,35 @@
 			samsung,pins = "gpc1-0";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samsung,pin-drv = <1>;
+			samsung,pin-drv = <2>;
 		};
 
 		sd1_cmd: sd1-cmd {
 			samsung,pins = "gpc1-1";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <0>;
-			samsung,pin-drv = <1>;
+			samsung,pin-drv = <2>;
 		};
 
 		sd1_bus1: sd1-bus-width1 {
 			samsung,pins = "gpc1-3";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samsung,pin-drv = <1>;
+			samsung,pin-drv = <2>;
 		};
 
 		sd1_bus4: sd1-bus-width4 {
 			samsung,pins = "gpc1-4", "gpc1-5", "gpc1-6";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samsung,pin-drv = <1>;
+			samsung,pin-drv = <2>;
 		};
 
 		sd1_bus8: sd1-bus-width8 {
 			samsung,pins = "gpd1-4", "gpd1-5", "gpd1-6", "gpd1-7";
 			samsung,pin-function = <2>;
 			samsung,pin-pud = <3>;
-			samsung,pin-drv = <1>;
+			samsung,pin-drv = <2>;
 		};
 
 		sd2_clk: sd2-clk {

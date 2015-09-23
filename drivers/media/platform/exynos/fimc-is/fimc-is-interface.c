@@ -1210,9 +1210,9 @@ static void wq_func_subdev(struct fimc_is_subdev *leader,
 		}
 
 		findex = sub_frame->stream->findex;
-		if (findex >= ldr_vctx->q_src->buf_maxcount) {
+		if (findex >= ldr_vctx->q_src.buf_maxcount) {
 			err("findex(%d) is invalid(max : %d)",
-				findex, ldr_vctx->q_src->buf_maxcount);
+				findex, ldr_vctx->q_src.buf_maxcount);
 			sub_frame->stream->fvalid = 0;
 			goto done;
 		}

@@ -1039,8 +1039,6 @@ static int __init exynos_init_cpuidle(void)
 		device->state_count = max_cpuidle_state;
 
 #if defined (CONFIG_EXYNOS_CLUSTER_POWER_DOWN)
-		if (cpu_id < 4)
-			device->state_count--;
 		per_cpu(in_c2_state, cpu_id) = 0;
 #endif
 
