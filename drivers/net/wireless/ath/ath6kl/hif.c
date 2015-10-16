@@ -22,7 +22,6 @@
 #include "target.h"
 #include "hif-ops.h"
 #include "debug.h"
-#include "trace.h"
 
 #define MAILBOX_FOR_BLOCK_SIZE          1
 
@@ -137,7 +136,6 @@ static int ath6kl_hif_proc_dbg_intr(struct ath6kl_device *dev)
 
 	ath6kl_hif_dump_fw_crash(dev->ar);
 	ath6kl_read_fwlogs(dev->ar);
-	ath6kl_recovery_err_notify(dev->ar, ATH6KL_FW_ASSERT);
 
 	return ret;
 }
@@ -340,7 +338,8 @@ static int ath6kl_hif_proc_err_intr(struct ath6kl_device *dev)
 	status = hif_read_write_sync(dev->ar, ERROR_INT_STATUS_ADDRESS,
 				     reg_buf, 4, HIF_WR_SYNC_BYTE_FIX);
 
-	WARN_ON(status);
+	if (status)
+		WARN_ON(1);
 
 	return status;
 }
@@ -384,7 +383,8 @@ static int ath6kl_hif_proc_cpu_intr(struct ath6kl_device *dev)
 	status = hif_read_write_sync(dev->ar, CPU_INT_STATUS_ADDRESS,
 				     reg_buf, 4, HIF_WR_SYNC_BYTE_FIX);
 
-	WARN_ON(status);
+	if (status)
+		WARN_ON(1);
 
 	return status;
 }
@@ -437,8 +437,6 @@ static int proc_pending_irqs(struct ath6kl_device *dev, bool *done)
 
 		ath6kl_dump_registers(dev, &dev->irq_proc_reg,
 				      &dev->irq_en_reg);
-		trace_ath6kl_sdio_irq(&dev->irq_en_reg,
-				      sizeof(dev->irq_en_reg));
 
 		/* Update only those registers that are enabled */
 		host_int_status = dev->irq_proc_reg.host_int_status &
@@ -696,6 +694,11 @@ int ath6kl_hif_setup(struct ath6kl_device *dev)
 
 	ath6kl_dbg(ATH6KL_DBG_HIF, "hif block size %d mbox addr 0x%x\n",
 		   dev->htc_cnxt->block_sz, dev->ar->mbox_info.htc_addr);
+
+	/* usb doesn't support enabling interrupts */
+	/* FIXME: remove check once USB support is implemented */
+	if (dev->ar->hif_type == ATH6KL_HIF_TYPE_USB)
+		return 0;
 
 	status = ath6kl_hif_disable_intrs(dev);
 

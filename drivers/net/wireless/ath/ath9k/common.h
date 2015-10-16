@@ -23,11 +23,19 @@
 
 /* Common header for Atheros 802.11n base driver cores */
 
+#define WME_NUM_TID             16
 #define WME_BA_BMP_SIZE         64
 #define WME_MAX_BA              WME_BA_BMP_SIZE
 #define ATH_TID_MAX_BUFS        (2 * WME_MAX_BA)
 
-#define ATH_RSSI_DUMMY_MARKER   127
+/* These must match mac80211 skb queue mapping numbers */
+#define WME_AC_VO   0
+#define WME_AC_VI   1
+#define WME_AC_BE   2
+#define WME_AC_BK   3
+#define WME_NUM_AC  4
+
+#define ATH_RSSI_DUMMY_MARKER   0x127
 #define ATH_RSSI_LPF_LEN 		10
 #define RSSI_LPF_THRESHOLD		-20
 #define ATH_RSSI_EP_MULTIPLIER     (1<<7)
@@ -40,8 +48,9 @@
 	x = ATH_LPF_RSSI((x), ATH_RSSI_IN((y)), ATH_RSSI_LPF_LEN);  	\
 } while (0)
 #define ATH_EP_RND(x, mul) 						\
-	(((x) + ((mul)/2)) / (mul))
+	((((x)%(mul)) >= ((mul)/2)) ? ((x) + ((mul) - 1)) / (mul) : (x)/(mul))
 
+int ath9k_cmn_padpos(__le16 frame_control);
 int ath9k_cmn_get_hw_crypto_keytype(struct sk_buff *skb);
 void ath9k_cmn_update_ichannel(struct ath9k_channel *ichan,
 			       struct ieee80211_channel *chan,

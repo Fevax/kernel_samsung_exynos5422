@@ -22,7 +22,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_linux.c 510762 2014-10-27 12:22:32Z $
+ * $Id: dhd_linux.c 506444 2014-10-06 07:15:02Z $
  */
 
 #include <typedefs.h>
@@ -313,7 +313,7 @@ extern int argos_task_affinity_setup(struct task_struct *p, int dev_num,
 extern struct cpumask hmp_slow_cpu_mask;
 extern struct cpumask hmp_fast_cpu_mask;
 extern void set_cpucore_for_interrupt(cpumask_var_t default_cpu_mask,
-	cpuumask_var_t affinity_cpu_mask);
+	cpumask_var_t affinity_cpu_mask);
 #endif /* CUSTOMER_HW4 && ARGOS_CPU_SCHEDULER */
 
 typedef struct dhd_if_event {
@@ -3476,14 +3476,12 @@ static int dhd_interworking_enable(dhd_pub_t *dhd)
 	}
 
 	if (ret == BCME_OK) {
+		/* basic capabilities for HS20 REL2 */
 		uint32 cap = WL_WNM_BSSTRANS | WL_WNM_NOTIF;
-
-		/* set WNM capabilities */
 		bcm_mkiovar("wnm", (char *)&cap, sizeof(cap), iovbuf, sizeof(iovbuf));
 		if ((ret = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR,
 			iovbuf, sizeof(iovbuf), TRUE, 0)) < 0) {
-			DHD_ERROR(("%s: failed to set WNM capabilities, ret=%d\n",
-				__FUNCTION__, ret));
+			DHD_ERROR(("%s: failed to set WNM info, ret=%d\n", __FUNCTION__, ret));
 		}
 	}
 

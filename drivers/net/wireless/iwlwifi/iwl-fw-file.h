@@ -5,7 +5,7 @@
  *
  * GPL LICENSE SUMMARY
  *
- * Copyright(c) 2008 - 2013 Intel Corporation. All rights reserved.
+ * Copyright(c) 2008 - 2012 Intel Corporation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of version 2 of the GNU General Public License as
@@ -22,7 +22,7 @@
  * USA
  *
  * The full GNU General Public License is included in this distribution
- * in the file called COPYING.
+ * in the file called LICENSE.GPL.
  *
  * Contact Information:
  *  Intel Linux Wireless <ilw@linux.intel.com>
@@ -30,7 +30,7 @@
  *
  * BSD LICENSE
  *
- * Copyright(c) 2005 - 2013 Intel Corporation. All rights reserved.
+ * Copyright(c) 2005 - 2012 Intel Corporation. All rights reserved.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,7 +93,15 @@ struct iwl_ucode_header {
  * new TLV uCode file layout
  *
  * The new TLV file format contains TLVs, that each specify
- * some piece of data.
+ * some piece of data. To facilitate "groups", for example
+ * different instruction image with different capabilities,
+ * bundled with the same init image, an alternative mechanism
+ * is provided:
+ * When the alternative field is 0, that means that the item
+ * is always valid. When it is non-zero, then it is only
+ * valid in conjunction with items of the same alternative,
+ * in which case the driver (user) selects one alternative
+ * to use.
  */
 
 enum iwl_ucode_tlv_type {
@@ -124,7 +132,8 @@ enum iwl_ucode_tlv_type {
 };
 
 struct iwl_ucode_tlv {
-	__le32 type;		/* see above */
+	__le16 type;		/* see above */
+	__le16 alternative;	/* see comment */
 	__le32 length;		/* not including type/length fields */
 	u8 data[0];
 };
@@ -143,7 +152,7 @@ struct iwl_tlv_ucode_header {
 	u8 human_readable[64];
 	__le32 ver;		/* major/minor/API/serial */
 	__le32 build;
-	__le64 ignore;
+	__le64 alternatives;	/* bitmask of valid alternatives */
 	/*
 	 * The data contained herein has a TLV layout,
 	 * see above for the TLV header and types.

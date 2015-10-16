@@ -14,8 +14,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
-
 #include <linux/kernel.h>
 #include <linux/export.h>
 #include <net/cfg80211.h>
@@ -195,6 +193,8 @@ ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 	const struct ieee80211_reg_rule *reg_rule;
 	struct ieee80211_channel *ch;
 	unsigned int i;
+	u32 bandwidth = 0;
+	int r;
 
 	for (band = 0; band < IEEE80211_NUM_BANDS; band++) {
 
@@ -212,8 +212,11 @@ ath_reg_apply_beaconing_flags(struct wiphy *wiphy,
 				continue;
 
 			if (initiator == NL80211_REGDOM_SET_BY_COUNTRY_IE) {
-				reg_rule = freq_reg_info(wiphy, ch->center_freq);
-				if (IS_ERR(reg_rule))
+				r = freq_reg_info(wiphy,
+						  ch->center_freq,
+						  bandwidth,
+						  &reg_rule);
+				if (r)
 					continue;
 				/*
 				 * If 11d had a rule for this channel ensure
@@ -249,6 +252,8 @@ ath_reg_apply_active_scan_flags(struct wiphy *wiphy,
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_channel *ch;
 	const struct ieee80211_reg_rule *reg_rule;
+	u32 bandwidth = 0;
+	int r;
 
 	sband = wiphy->bands[IEEE80211_BAND_2GHZ];
 	if (!sband)
@@ -276,16 +281,16 @@ ath_reg_apply_active_scan_flags(struct wiphy *wiphy,
 	 */
 
 	ch = &sband->channels[11]; /* CH 12 */
-	reg_rule = freq_reg_info(wiphy, ch->center_freq);
-	if (!IS_ERR(reg_rule)) {
+	r = freq_reg_info(wiphy, ch->center_freq, bandwidth, &reg_rule);
+	if (!r) {
 		if (!(reg_rule->flags & NL80211_RRF_PASSIVE_SCAN))
 			if (ch->flags & IEEE80211_CHAN_PASSIVE_SCAN)
 				ch->flags &= ~IEEE80211_CHAN_PASSIVE_SCAN;
 	}
 
 	ch = &sband->channels[12]; /* CH 13 */
-	reg_rule = freq_reg_info(wiphy, ch->center_freq);
-	if (!IS_ERR(reg_rule)) {
+	r = freq_reg_info(wiphy, ch->center_freq, bandwidth, &reg_rule);
+	if (!r) {
 		if (!(reg_rule->flags & NL80211_RRF_PASSIVE_SCAN))
 			if (ch->flags & IEEE80211_CHAN_PASSIVE_SCAN)
 				ch->flags &= ~IEEE80211_CHAN_PASSIVE_SCAN;
@@ -356,9 +361,9 @@ static u16 ath_regd_find_country_by_name(char *alpha2)
 	return -1;
 }
 
-void ath_reg_notifier_apply(struct wiphy *wiphy,
-			    struct regulatory_request *request,
-			    struct ath_regulatory *reg)
+int ath_reg_notifier_apply(struct wiphy *wiphy,
+			   struct regulatory_request *request,
+			   struct ath_regulatory *reg)
 {
 	struct ath_common *common = container_of(reg, struct ath_common,
 						 regulatory);
@@ -373,7 +378,7 @@ void ath_reg_notifier_apply(struct wiphy *wiphy,
 	 * any pending requests in the queue.
 	 */
 	if (!request)
-		return;
+		return 0;
 
 	switch (request->initiator) {
 	case NL80211_REGDOM_SET_BY_CORE:
@@ -409,6 +414,8 @@ void ath_reg_notifier_apply(struct wiphy *wiphy,
 
 		break;
 	}
+
+	return 0;
 }
 EXPORT_SYMBOL(ath_reg_notifier_apply);
 
@@ -498,8 +505,8 @@ ath_get_regpair(int regdmn)
 static int
 ath_regd_init_wiphy(struct ath_regulatory *reg,
 		    struct wiphy *wiphy,
-		    void (*reg_notifier)(struct wiphy *wiphy,
-					 struct regulatory_request *request))
+		    int (*reg_notifier)(struct wiphy *wiphy,
+					struct regulatory_request *request))
 {
 	const struct ieee80211_regdomain *regd;
 
@@ -513,6 +520,7 @@ ath_regd_init_wiphy(struct ath_regulatory *reg,
 		 */
 		regd = ath_world_regdomain(reg);
 		wiphy->flags |= WIPHY_FLAG_CUSTOM_REGULATORY;
+		wiphy->country_ie_pref = NL80211_COUNTRY_IE_FOLLOW_POWER;
 	} else {
 		/*
 		 * This gets applied in the case of the absence of CRDA,
@@ -555,7 +563,7 @@ static int __ath_regd_init(struct ath_regulatory *reg)
 	printk(KERN_DEBUG "ath: EEPROM regdomain: 0x%0x\n", reg->current_rd);
 
 	if (!ath_regd_is_eeprom_valid(reg)) {
-		pr_err("Invalid EEPROM contents\n");
+		printk(KERN_ERR "ath: Invalid EEPROM contents\n");
 		return -EINVAL;
 	}
 
@@ -619,8 +627,8 @@ static int __ath_regd_init(struct ath_regulatory *reg)
 int
 ath_regd_init(struct ath_regulatory *reg,
 	      struct wiphy *wiphy,
-	      void (*reg_notifier)(struct wiphy *wiphy,
-				   struct regulatory_request *request))
+	      int (*reg_notifier)(struct wiphy *wiphy,
+				  struct regulatory_request *request))
 {
 	struct ath_common *common = container_of(reg, struct ath_common,
 						 regulatory);
