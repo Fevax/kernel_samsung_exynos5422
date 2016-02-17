@@ -164,7 +164,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_D_OPT_LF_CTRL_MASK		0x3
 #define S5P_FIMV_D_OPT_TILE_MODE_SHIFT		0
 #define S5P_FIMV_D_OPT_DYNAMIC_DPB_SET_SHIFT	3
-#define S5P_FIMV_D_OPT_NOT_CODED_SET_SHIFT	4
 
 #define S5P_FIMV_D_DISPLAY_DELAY		0xF0B8
 
@@ -804,9 +803,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_E_VP8_HIERARCHICAL_QP_LAYER0	0xFDC8
 #define S5P_FIMV_E_VP8_HIERARCHICAL_QP_LAYER1	0xFDCC
 #define S5P_FIMV_E_VP8_HIERARCHICAL_QP_LAYER2	0xFDD0
-
-/* for compatibility */
-#define S5P_FIMV_E_GOP_CONFIG2			-1
 
 /* Decoder SFRs for MFC v6.x only */
 #define S5P_FIMV_D_DISPLAY_LUMA_CRC_BOT		0xF52C

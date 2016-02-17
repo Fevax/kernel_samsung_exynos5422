@@ -92,7 +92,7 @@
 #define FW_2P3		"J16LL"
 
 #define SDCARD_FW
-#define FIMC_IS_SETFILE_SDCARD_PATH		"/system/vendor/firmware/"
+#define FIMC_IS_SETFILE_SDCARD_PATH		"/data/media/0/"
 #define FIMC_IS_FW				"fimc_is_fw2.bin"
 #define FIMC_IS_FW_2P2				"fimc_is_fw2_2p2.bin"
 #define FIMC_IS_FW_2P2_12M				"fimc_is_fw2_2p2_12m.bin"
@@ -106,7 +106,7 @@
 #define FIMC_IS_FW_COMPANION_2P2_EVT1				"companion_fw_2p2_evt1.bin"
 #define FIMC_IS_FW_COMPANION_2P2_12M_EVT1				"companion_fw_2p2_12m_evt1.bin"
 #define FIMC_IS_FW_COMPANION_IMX240_EVT1				"companion_fw_imx240_evt1.bin"
-#define FIMC_IS_FW_SDCARD			"/system/vendor/firmware/fimc_is_fw2.bin"
+#define FIMC_IS_FW_SDCARD			"/data/media/0/fimc_is_fw2.bin"
 #define FIMC_IS_IMX240_SETF			"setfile_imx240.bin"
 #define FIMC_IS_IMX135_SETF			"setfile_imx135.bin"
 #define FIMC_IS_IMX134_SETF			"setfile_imx134.bin"

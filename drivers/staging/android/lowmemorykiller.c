@@ -40,7 +40,6 @@
 #include <linux/swap.h>
 #include <linux/rcupdate.h>
 #include <linux/notifier.h>
-#include <linux/delay.h>
 
 #ifdef CONFIG_SEC_DEBUG_LMK_COUNT_INFO
 #define OOM_COUNT_READ
@@ -116,11 +115,6 @@ static void dump_tasks_info(void)
 }
 #endif
 
-#if defined(CONFIG_ZSWAP)
-extern atomic_t zswap_pool_pages;
-extern atomic_t zswap_stored_pages;
-#endif
-
 static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 {
 	struct task_struct *tsk;
@@ -132,11 +126,13 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	int minfree = 0;
 	int selected_tasksize = 0;
 	short selected_oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+	int selected_hotness_adj = 0;
+#endif
 	int array_size = ARRAY_SIZE(lowmem_adj);
 	int other_free = global_page_state(NR_FREE_PAGES) - totalreserve_pages;
 	int other_file = global_page_state(NR_FILE_PAGES) -
 						global_page_state(NR_SHMEM);
-	struct reclaim_state *reclaim_state = current->reclaim_state;
 
 #ifdef CONFIG_ZSWAP
 	/* to prevent other_file underflow and then be negative */
@@ -176,6 +172,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 	for_each_process(tsk) {
 		struct task_struct *p;
 		short oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+		int hotness_adj = 0;
+#endif
 		if (tsk->flags & PF_KTHREAD)
 			continue;
 
@@ -187,8 +186,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		    time_before_eq(jiffies, lowmem_deathpending_timeout)) {
 			task_unlock(p);
 			rcu_read_unlock();
-			/* give the system time to free up the memory */
-			msleep_interruptible(20);
 			return 0;
 		}
 		oom_score_adj = p->signal->oom_score_adj;
@@ -197,31 +194,54 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			continue;
 		}
 		tasksize = get_mm_rss(p->mm);
-#if defined(CONFIG_ZSWAP)
-		if (atomic_read(&zswap_stored_pages)) {
-			lowmem_print(3, "shown tasksize : %d\n", tasksize);
-			tasksize += atomic_read(&zswap_pool_pages) * get_mm_counter(p->mm, MM_SWAPENTS)
-				/ atomic_read(&zswap_stored_pages);
-			lowmem_print(3, "real tasksize : %d\n", tasksize);
-		}
+#ifdef CONFIG_SAMP_HOTNESS
+		hotness_adj = p->signal->hotness_adj;
 #endif
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
 		if (selected) {
+#ifdef CONFIG_SAMP_HOTNESS
+			if (min_score_adj <= lowmem_adj[4]) {
+#endif
 			if (oom_score_adj < selected_oom_score_adj)
 				continue;
 			if (oom_score_adj == selected_oom_score_adj &&
 			    tasksize <= selected_tasksize)
 				continue;
+#ifdef CONFIG_SAMP_HOTNESS
+			} else {
+				if (hotness_adj > selected_hotness_adj)
+					continue;
+				if (hotness_adj == selected_hotness_adj && tasksize <= selected_tasksize)
+					continue;
+			}
+#endif
 		}
 		selected = p;
 		selected_tasksize = tasksize;
 		selected_oom_score_adj = oom_score_adj;
+#ifdef CONFIG_SAMP_HOTNESS
+		selected_hotness_adj = hotness_adj;
+#endif
 		lowmem_print(2, "select '%s' (%d), adj %hd, size %d, to kill\n",
 			     p->comm, p->pid, oom_score_adj, tasksize);
 	}
 	if (selected) {
+#ifdef CONFIG_SAMP_HOTNESS
+		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
+				"   to free %ldkB on behalf of '%s' (%d) because\n" \
+				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd, hotness %d\n" \
+				"   Free memory is %ldkB above reserved\n",
+			     selected->comm, selected->pid,
+			     selected_oom_score_adj,
+			     selected_tasksize * (long)(PAGE_SIZE / 1024),
+			     current->comm, current->pid,
+			     other_file * (long)(PAGE_SIZE / 1024),
+			     minfree * (long)(PAGE_SIZE / 1024),
+			     min_score_adj, selected_hotness_adj,
+			     other_free * (long)(PAGE_SIZE / 1024));
+#else
 		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
 				"   to free %ldkB on behalf of '%s' (%d) because\n" \
 				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
@@ -234,22 +254,16 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     minfree * (long)(PAGE_SIZE / 1024),
 			     min_score_adj,
 			     other_free * (long)(PAGE_SIZE / 1024));
+#endif
 		lowmem_deathpending_timeout = jiffies + HZ;
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
 		rem -= selected_tasksize;
-		rcu_read_unlock();
 		lowmem_lmkcount++;
-		/* give the system time to free up the memory */
-		msleep_interruptible(20);
-
-		if(reclaim_state)
-			reclaim_state->reclaimed_slab += selected_tasksize;
-	} else {
-		rcu_read_unlock();
 	}
 	lowmem_print(4, "lowmem_shrink %lu, %x, return %d\n",
 		     sc->nr_to_scan, sc->gfp_mask, rem);
+	rcu_read_unlock();
 	return rem;
 }
 

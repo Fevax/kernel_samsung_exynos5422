@@ -23,7 +23,6 @@
 #include "fimc-is-core.h"
 #include "fimc-is-dvfs.h"
 #include "fimc-is-clk-gate.h"
-#include "fimc-is-hw.h"
 
 struct pm_qos_request exynos_isp_qos_cpu_min;
 struct pm_qos_request exynos_isp_qos_cpu_max;
@@ -192,13 +191,6 @@ int fimc_is_resource_put(struct fimc_is_resourcemgr *resourcemgr, u32 rsc_type)
 			BUG();
 			break;
 		}
-	}
-
-	/* global update */
-	if (atomic_read(&core->rsccount) == 1) {
-		ret = fimc_is_runtime_suspend_post(NULL);
-		if (ret)
-			err("fimc_is_runtime_suspend_post is fail(%d)", ret);
 	}
 
 	atomic_dec(&resource->rsccount);

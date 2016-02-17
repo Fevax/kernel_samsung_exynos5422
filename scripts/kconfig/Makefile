@@ -4,9 +4,6 @@
 
 PHONY += oldconfig xconfig gconfig menuconfig config silentoldconfig update-po-config \
 	localmodconfig localyesconfig
-	
-#PHONY += xconfig gconfig menuconfig config update-po-config \
-#	localmodconfig localyesconfig
 
 ifdef KBUILD_KCONFIG
 Kconfig := $(KBUILD_KCONFIG)

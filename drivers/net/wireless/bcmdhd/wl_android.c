@@ -2723,9 +2723,8 @@ wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 
 	DHD_INFO(("%s: enter miracast mode %d\n", __FUNCTION__, mode));
 
-	if (miracast_cur_mode == mode) {
+	if (miracast_cur_mode == mode)
 		return 0;
-	}
 
 	wl_android_iolist_resume(dev, &miracast_resume_list);
 	miracast_cur_mode = MIRACAST_MODE_OFF;
@@ -2746,25 +2745,22 @@ wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 			config.param = MIRACAST_MCHAN_ALGO;
 		}
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret) {
+		if (ret)
 			goto resume;
-		}
 
 		/* setting mchan_bw to platform specific value */
 		config.iovar = "mchan_bw";
 		config.param = MIRACAST_MCHAN_BW;
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret) {
+		if (ret)
 			goto resume;
-		}
 
 		/* setting apmdu to platform specific value */
 		config.iovar = "ampdu_mpdu";
 		config.param = MIRACAST_AMPDU_SIZE;
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret) {
+		if (ret)
 			goto resume;
-		}
 		/* FALLTROUGH */
 		/* Source mode shares most configurations with sink mode.
 		 * Fall through here to avoid code duplication
@@ -2774,25 +2770,17 @@ wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 		config.iovar = "roam_off";
 		config.param = 1;
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret) {
+		if (ret)
 			goto resume;
-		}
-		/* turn off pm */
-		ret = wldev_ioctl(dev, WLC_GET_PM, &val, sizeof(val), false);
-		if(ret) {
-			goto resume;
-		}
-		if (val != PM_OFF) {
-			val = PM_OFF;
+		/* tunr off pm */
+		val = 0;
 		config.iovar = NULL;
 		config.ioctl = WLC_GET_PM;
 		config.arg = &val;
 		config.len = sizeof(int);
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-			if (ret) {
+		if (ret)
 			goto resume;
-			}
-		}
 
 		break;
 	case MIRACAST_MODE_OFF:
