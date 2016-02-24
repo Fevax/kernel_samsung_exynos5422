@@ -557,6 +557,16 @@ config SWAP_ENABLE_READAHEAD
 	  This behaviour is good at disk-based system, but not on in-memory
 	  compression (e.g. zram).
 
+config BALANCE_ANON_FILE_RECLAIM
+	bool "During reclaim treat anon and file backed pages equally"
+	depends on SWAP
+	default n
+	help
+	  When performing memory reclaim treat anonymous and file backed pages
+	  equally.
+	  Swapping anonymous pages out to memory can be efficient enough to justify
+	  treating anonymous and file backed pages equally.
+
 config ZOOM_KILLER
 	bool "Samsung extension. Selet victim who has largest lowmem with same score"
 	depends on !OOM_KILLER_TIMEOUT && !SEC_OOM_KILLER
@@ -588,3 +598,11 @@ config MIN_DIRTY_THRESH_PAGES
 	  It is only effective when dirty_ratio is used. (Setting dirty_bytes
 	  disables this option.)
 	  Do not use it if you unsure.
+
+config MMAP_READAROUND_LIMIT
+	int "Limit mmap readaround upperbound"
+	default 0
+	help
+	  Inappropriate mmap readaround size can hurt device performance
+	  during the sluggish situation. Add the hard upper-limit for
+	  mmap readaround.

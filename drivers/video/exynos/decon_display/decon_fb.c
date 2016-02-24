@@ -2029,6 +2029,37 @@ static int s3c_format_bpp(enum s3c_fb_pixel_format fmt)
 	return ((bpp + 1) & (~1));
 }
 
+static bool is_prot_win_updated(struct s3c_fb *sfb,
+		struct s3c_fb_win_config *win_config,
+		struct s3c_fb_win_config *update_config)
+{
+	int i;
+	struct s3c_fb_win_config *config;
+	struct s3c_fb_rect r1, r2;
+
+	if (update_config->state == S3C_FB_WIN_STATE_DISABLED)
+		return true;
+
+	r1.left	= update_config->x;
+	r1.top = update_config->y;
+	r1.right = r1.left + update_config->w -	1;
+	r1.bottom = r1.top + update_config->h -	1;
+	for (i = 0; i <	sfb->variant.nr_windows; i++) {
+		config = &win_config[i];
+		if (config->state == S3C_FB_WIN_STATE_DISABLED)
+			continue;
+		if (config->protection)	{
+			r2.left	= config->x;
+			r2.top = config->y;
+			r2.right = r2.left + config->w - 1;
+			r2.bottom = r2.top + config->h - 1;
+			if (!s3c_fb_intersect(&r1, &r2))
+				return false;
+		}
+	}
+	return true;
+}
+
 static void s3c_set_win_update_config(struct s3c_fb *sfb,
 			struct s3c_fb_win_config *win_config,
 			struct s3c_reg_data *regs)
@@ -2074,6 +2105,9 @@ static void s3c_set_win_update_config(struct s3c_fb *sfb,
 	update_config->w = ((update_config->w + 7) >> 3) << 3;
 	if (update_config->x + update_config->w > sfb->lcd_info->xres)
 		update_config->x = sfb->lcd_info->xres - update_config->w;
+
+	if (!is_prot_win_updated(sfb, win_config, update_config))
+		update_config->state = S3C_FB_WIN_STATE_DISABLED;
 
 	if ((update_config->state == S3C_FB_WIN_STATE_UPDATE) &&
 		((update_config->x != sfb->update_win.x) ||
@@ -2130,6 +2164,7 @@ static void s3c_set_win_update_config(struct s3c_fb *sfb,
 		r2.bottom = r2.top + config->h - 1;
 		if (!s3c_fb_intersect(&r1, &r2)) {
 			config->state = S3C_FB_WIN_STATE_DISABLED;
+			config->protection = 0;
 			continue;
 		}
 		memcpy(&temp_config, config, sizeof(struct s3c_fb_win_config));

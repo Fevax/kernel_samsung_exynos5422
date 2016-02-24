@@ -1269,6 +1269,7 @@ int max86900_probe(struct i2c_client *client, const struct i2c_device_id *id )
 	input_set_capability(data->hrm_input_dev, EV_REL, REL_X);
 	input_set_capability(data->hrm_input_dev, EV_REL, REL_Y);
 	input_set_capability(data->hrm_input_dev, EV_REL, REL_Z);
+	input_set_capability(data->hrm_input_dev, EV_REL, REL_MISC);
 
 	err = input_register_device(data->hrm_input_dev);
 	if (err < 0) {

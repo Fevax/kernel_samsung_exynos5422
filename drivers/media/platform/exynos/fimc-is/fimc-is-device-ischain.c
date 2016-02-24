@@ -1403,7 +1403,6 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 	int i;
 #endif
 	int ret = 0;
-	u32 timeout;
 	u32 debug;
 #if defined(CONFIG_PM_RUNTIME)
 	int rpm_ret;
@@ -1550,55 +1549,6 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 
 			fimc_is_a5_power(dev, 0);
 		}
-#if !defined(CONFIG_SOC_EXYNOS4415)
-		timeout = 2000;
-		while ((readl(PMUREG_ISP_STATUS) & 0x1) && timeout) {
-			timeout--;
-			usleep_range(1000, 1000);
-		}
-		if (timeout == 0)
-			err("ISP power down failed(0x%08x)\n",
-				readl(PMUREG_ISP_STATUS));
-#endif
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
-		timeout = 1000;
-		while ((readl(PMUREG_CAM0_STATUS) & 0x1) && timeout) {
-			timeout--;
-			usleep_range(1000, 1000);
-		}
-		if (timeout == 0)
-			err("CAM0 power down failed(0x%08x)\n",
-				readl(PMUREG_CAM0_STATUS));
-
-		timeout = 2000;
-		while ((readl(PMUREG_CAM1_STATUS) & 0x1) && timeout) {
-			timeout--;
-			usleep_range(1000, 1000);
-		}
-		if (timeout == 0)
-			err("CAM1 power down failed(CAM1:0x%08x, A5:0x%08x)\n",
-				readl(PMUREG_CAM1_STATUS), readl(PMUREG_ISP_ARM_STATUS));
-#endif /* defined(CONFIG_SOC_EXYNOS5430) */
-#if defined(CONFIG_SOC_EXYNOS4415)
-		timeout = 1000;
-		while ((readl(PMUREG_ISP0_STATUS) & 0x1) && timeout) {
-			timeout--;
-			usleep_range(1000, 1000);
-		}
-		if (timeout == 0)
-			err("ISP0 power down failed(0x%08x)\n", readl(PMUREG_ISP0_STATUS));
-
-		timeout = 1000;
-		while ((readl(PMUREG_ISP1_STATUS) & 0x1) && timeout) {
-			timeout--;
-			usleep_range(1000, 1000);
-		}
-		if (timeout == 0)
-			err("ISP0 power down failed(0x%08x)\n", readl(PMUREG_ISP1_STATUS));
-
-#endif /* defined(CONFIG_SOC_EXYNOS5430) */
-#if defined(CONFIG_SOC_EXYNOS5422)
-#endif /* defined(CONFIG_SOC_EXYNOS5422) */
 #else
 		fimc_is_a5_power(dev, 0);
 
