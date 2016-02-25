@@ -213,6 +213,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			lowmem_print(3, "real tasksize : %d\n", tasksize);
 		}
 #endif
+#endif
 		task_unlock(p);
 		if (tasksize <= 0)
 			continue;
