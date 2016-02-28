@@ -497,7 +497,7 @@ CONFIG_HAVE_MEMBLOCK=y
 CONFIG_MEMORY_ISOLATION=y
 # CONFIG_HAVE_BOOTMEM_INFO_NODE is not set
 CONFIG_PAGEFLAGS_EXTENDED=y
-CONFIG_SPLIT_PTLOCK_CPUS=999999
+CONFIG_SPLIT_PTLOCK_CPUS=4
 CONFIG_COMPACTION=y
 CONFIG_MIGRATION=y
 CONFIG_SEC_SLOWPATH=y
@@ -539,7 +539,7 @@ CONFIG_ATAGS=y
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
 # CONFIG_ARM_APPENDED_DTB is not set
-CONFIG_CMDLINE="console=ram loglevel=4 sec_debug.level=0 sec_watchdog.sec_pet=5 printk.core_num=1 androidboot.debug_level=0x4f4c sec_log=0x200000@0x46000000 sec_avc_log=0x40000@0x46404000 s3cfb.bootloaderfb=0x87000000 lcdtype=6301715 consoleblank=0 vmalloc=256m sec_debug.reset_reason=9 oops=panic pmic_info=83 androidboot.selinux=permissive androidboot.hardware=universal5422 snd_soc_core.pmdown_time=1000"
+CONFIG_CMDLINE="console=ram loglevel=4 sec_debug.level=0 sec_watchdog.sec_pet=5 printk.core_num=1 androidboot.debug_level=0x4f4c sec_log=0x200000@0x46000000 sec_avc_log=0x40000@0x46404000 s3cfb.bootloaderfb=0x87000000 lcdtype=6301715 consoleblank=0 vmalloc=256m sec_debug.reset_reason=9 oops=panic pmic_info=83 androidboot.selinux=disabled androidboot.hardware=universal5422 snd_soc_core.pmdown_time=1000"
 # CONFIG_CMDLINE_FROM_BOOTLOADER is not set
 # CONFIG_CMDLINE_EXTEND is not set
 CONFIG_CMDLINE_FORCE=y
@@ -1081,14 +1081,21 @@ CONFIG_NFC=y
 #
 # Near Field Communication (NFC) devices
 #
-CONFIG_NFC_PN547=y
-CONFIG_NFC_PN547_CLOCK_REQUEST=y
 # CONFIG_NFC_PN533 is not set
-# CONFIG_NFC_PN65N is not set
 # CONFIG_SEC_NFC_I2C is not set
 # CONFIG_SEC_NFC is not set
 # CONFIG_SEC_NFC_CLK_REQ is not set
 # CONFIG_SEC_NFC_MARGINTIME is not set
+# CONFIG_ESE_P3_LSI is not set
+# CONFIG_ESE_FACTORY_ONLY is not set
+CONFIG_NFC_PN547=y
+CONFIG_NFC_PN547_CLK_BBCLK2=y
+CONFIG_NFC_P61=y
+CONFIG_NFC_PN547_ESE_SUPPORT=y
+CONFIG_NFC_PN547_LDO_CONTROL=y
+# CONFIG_SEC_NFC_SENN3AB is not set
+# CONFIG_NFC_DEBUG is not set
+# CONFIG_NFC_EDC_TUNING is not set
 # CONFIG_IPC_ROUTER is not set
 CONFIG_HAVE_BPF_JIT=y
 
@@ -1801,7 +1808,7 @@ CONFIG_SPI_S3C64XX=y
 #
 # CONFIG_SPI_SPIDEV is not set
 # CONFIG_SPI_TLE62X0 is not set
-CONFIG_SENSORS_FP_SPI_NUMBER=0
+CONFIG_SENSORS_FP_SPI_NUMBER=1
 
 #
 # Qualcomm MSM SSBI bus support
