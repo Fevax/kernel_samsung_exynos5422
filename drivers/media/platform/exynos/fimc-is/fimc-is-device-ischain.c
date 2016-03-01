@@ -3846,7 +3846,7 @@ static int fimc_is_ischain_s_chain3_size(struct fimc_is_device_ischain *device,
 	fimc_is_ischain_scp_adjust_crop(device, scp_param, &width, &height);
 
 	vctx = device->scp.vctx;
-	queue = &vctx->q_dst;
+	queue = vctx->q_dst;
 
 	chain2_width = device->chain2_width;
 	chain2_height = device->chain2_height;

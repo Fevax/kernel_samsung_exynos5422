@@ -1029,7 +1029,9 @@ crc_retry:
 				, finfo->project_name[6], finfo->project_name[7]);
 
 			if (!core->use_module_check) {
+#if defined(CONFIG_SOC_EXYNOS5422)
 				is_right_prj_name = true;
+#endif
 				is_latest_cam_module = true;
 				is_final_cam_module = true;
 			}
@@ -1829,7 +1831,8 @@ int fimc_is_sec_fw_find(struct fimc_is_core *core, char *fw_name, char *setf_nam
 	} else if (fimc_is_sec_fw_module_compare(sysfs_finfo.header_ver, FW_2P3)) {
 		snprintf(fw_name, sizeof(FIMC_IS_FW_2P3), "%s", FIMC_IS_FW_2P3);
 		snprintf(setf_name, sizeof(FIMC_IS_2P3_SETF), "%s", FIMC_IS_2P3_SETF);
-	} else if (fimc_is_sec_fw_module_compare(sysfs_finfo.header_ver, FW_4H5)) {
+	} else if (fimc_is_sec_fw_module_compare(sysfs_finfo.header_ver, FW_4H5_F) ||
+		fimc_is_sec_fw_module_compare(sysfs_finfo.header_ver, FW_4H5_H)) {
 		snprintf(fw_name, sizeof(FIMC_IS_FW_4H5), "%s", FIMC_IS_FW_4H5);
 		snprintf(setf_name, sizeof(FIMC_IS_4H5_SETF), "%s", FIMC_IS_4H5_SETF);
 	} else if (fimc_is_sec_fw_module_compare(sysfs_finfo.header_ver, FW_IMX240) ||
@@ -2074,6 +2077,13 @@ int fimc_is_sec_fw_sel(struct fimc_is_core *core, struct device *dev,
 	bool is_ldo_enabled = false;
 	struct exynos_platform_fimc_is_sensor *pdata;
 	struct fimc_is_device_sensor *sensor_device = &core->sensor[0];
+
+#ifdef CONFIG_CAMERA_ONLY_SUPPORT_FRONT
+	/* This codes SHOULD BE REMOVED after bringing up rear camera */
+	info("%s: not supported\n", __func__);
+	snprintf(fw_name, sizeof(FIMC_IS_FW), "%s", FIMC_IS_FW);
+	return 0;
+#endif
 
 	BUG_ON(!sensor_device);
 	BUG_ON(!sensor_device->pdata);

@@ -88,7 +88,8 @@
 #define FW_IMX240_Q	"H16US"
 #define FW_IMX240_Q_C1	"H16UL"
 #define FW_2P2_12M	"G16LL"
-#define FW_4H5		"F08LL"
+#define FW_4H5_F		"F08LL"
+#define FW_4H5_H		"H08LL"
 #define FW_2P3		"J16LL"
 
 #define SDCARD_FW

@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_cfg80211.h 500595 2014-09-04 17:39:18Z $
+ * $Id: wl_cfg80211.h 524246 2015-01-06 09:25:07Z $
  */
 
 /**
@@ -653,6 +653,7 @@ struct bcm_cfg80211 {
 #if defined(CUSTOMER_HW4) && defined(WL_CFG80211_P2P_DEV_IF)
 	bool down_disc_if;
 #endif /* CUSTOMER_HW4 && WL_CFG80211_P2P_DEV_IF */
+	bool need_wait_afrx;
 };
 
 
@@ -1094,5 +1095,14 @@ extern void wl_cfg80211_del_p2p_wdev(void);
 extern int wl_cfg80211_is_primary_device(struct net_device *ndev);
 extern int wl_cfg80211_is_connected(struct net_device *ndev);
 #endif /* CUSTOMER_HW4 */
+
+#define RETURN_EIO_IF_NOT_UP(wlpriv)                        \
+do {                                    \
+	struct net_device *checkSysUpNDev = bcmcfg_to_prmry_ndev(wlpriv);           \
+	if (unlikely(!wl_get_drv_status(wlpriv, READY, checkSysUpNDev))) {  \
+		WL_INFORM(("device is not ready\n"));           \
+		return -EIO;                        \
+	}                               \
+} while (0)
 
 #endif /* _wl_cfg80211_h_ */

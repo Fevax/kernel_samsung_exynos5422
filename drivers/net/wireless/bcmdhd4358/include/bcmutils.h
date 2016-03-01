@@ -1,7 +1,7 @@
 /*
  * Misc useful os-independent macros and functions.
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: bcmutils.h 504038 2014-09-22 19:05:19Z $
+ * $Id: bcmutils.h 517450 2014-11-25 10:23:13Z $
  */
 
 #ifndef	_bcmutils_h_
@@ -1170,5 +1170,9 @@ typedef struct _counter_tbl_t {
 
 void counter_printlog(counter_tbl_t *ctr_tbl);
 #endif /* DEBUG_COUNTER */
+
+/* below MACRO use on GSCAN, RTT */
+#define TIMESPEC_TO_US(ts)  (((uint64)(ts).tv_sec * USEC_PER_SEC) + \
+		(ts).tv_nsec / NSEC_PER_USEC)
 
 #endif	/* _bcmutils_h_ */

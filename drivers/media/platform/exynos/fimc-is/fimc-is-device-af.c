@@ -174,27 +174,27 @@ int fimc_is_af_ldo_enable(char *name, bool on)
 	if (on) {
 		if (regulator_is_enabled(regulator)) {
 			pr_info("%s: regulator is already enabled\n", name);
-			goto exit;
-		}
-
-		ret = regulator_enable(regulator);
-		if (ret) {
-			err("%s : regulator_enable(%s) fail\n", __func__, name);
-			goto exit;
+			ret = 0;
+		} else {
+			ret = regulator_enable(regulator);
+			if (ret) {
+				err("%s : regulator_enable(%s) fail\n", __func__, name);
+				ret = -EINVAL;
+			}
 		}
 	} else {
 		if (!regulator_is_enabled(regulator)) {
 			pr_info("%s: regulator is already disabled\n", name);
-			goto exit;
-		}
-
-		ret = regulator_disable(regulator);
-		if (ret) {
-			err("%s : regulator_disable(%s) fail\n", __func__, name);
-			goto exit;
+			ret = 0;
+		} else {
+			ret = regulator_disable(regulator);
+			if (ret) {
+				err("%s : regulator_disable(%s) fail\n", __func__, name);
+				ret = -EINVAL;
+			}
 		}
 	}
-exit:
+
 	regulator_put(regulator);
 
 	return ret;

@@ -76,7 +76,7 @@
 #define WLAN_SKB_BUF_NUM	17
 
 #if defined(CONFIG_ARGOS)
-extern int argos_irq_affinity_setup(unsigned int irq, int dev_num,
+extern int argos_irq_affinity_setup_label(unsigned int irq, const char *label,
                  struct cpumask *affinity_cpu_mask,
                  struct cpumask *default_cpu_mask);
 #endif /* CONFIG_ARGOS */
@@ -289,8 +289,8 @@ int __init dhd_wlan_init_gpio(void)
 void set_cpucore_for_interrupt(cpumask_var_t default_cpu_mask,
 	cpumask_var_t affinity_cpu_mask) {
 #if defined(CONFIG_MACH_UNIVERSAL5430)
-	argos_irq_affinity_setup(IRQ_SPI(226), 2, affinity_cpu_mask, default_cpu_mask);
-	argos_irq_affinity_setup(IRQ_SPI(2), 2, affinity_cpu_mask, default_cpu_mask);
+	argos_irq_affinity_setup_label(IRQ_SPI(226), "WIFI", affinity_cpu_mask, default_cpu_mask);
+	argos_irq_affinity_setup_label(IRQ_SPI(2), "WIFI", affinity_cpu_mask, default_cpu_mask);
 #endif
 }
 #endif /* CONFIG_ARGOS */

@@ -308,12 +308,12 @@ static void dhd_sysfs_destroy_node(struct net_device *net);
 
 
 #if defined(CUSTOMER_HW4) && defined(ARGOS_CPU_SCHEDULER)
-extern int argos_task_affinity_setup(struct task_struct *p, int dev_num,
+extern int argos_task_affinity_setup_label(struct task_struct *p, const char *label,
 	struct cpumask * affinity_cpu_mask, struct cpumask * default_cpu_mask);
 extern struct cpumask hmp_slow_cpu_mask;
 extern struct cpumask hmp_fast_cpu_mask;
 extern void set_cpucore_for_interrupt(cpumask_var_t default_cpu_mask,
-	cpuumask_var_t affinity_cpu_mask);
+	cpumask_var_t affinity_cpu_mask);
 #endif /* CUSTOMER_HW4 && ARGOS_CPU_SCHEDULER */
 
 typedef struct dhd_if_event {
@@ -2567,7 +2567,7 @@ dhd_dpc_thread(void *data)
 					dhd->pub.dpc_affinity_cpu_mask, cpumask_of(DPC_CPUCORE));
 
 				flags = dhd_os_spin_lock(&dhd->pub);
-				if ((ret = argos_task_affinity_setup(current, 2,
+					if ((ret = argos_task_affinity_setup_label(current, "WIFI",
 					dhd->pub.dpc_affinity_cpu_mask,
 					dhd->pub.default_cpu_mask)) < 0) {
 					DHD_ERROR(("Failed to add CPU affinity(dpc) error=%d\n",
@@ -2685,7 +2685,7 @@ dhd_rxf_thread(void *data)
 			cpumask_of(RXF_CPUCORE));
 
 		flags = dhd_os_spin_lock(&dhd->pub);
-		if ((ret = argos_task_affinity_setup(current, 2, dhd->pub.rxf_affinity_cpu_mask,
+		if ((ret = argos_task_affinity_setup_label(current, "WIFI", dhd->pub.rxf_affinity_cpu_mask,
 			dhd->pub.default_cpu_mask)) < 0) {
 			DHD_ERROR(("Failed to add CPU affinity(rxf) error=%d\n", ret));
 			dhd->pub.affinity_isrxf = FALSE;
@@ -3408,6 +3408,9 @@ dhd_stop(struct net_device *net)
 			if ((dhd->dhd_state & DHD_ATTACH_STATE_ADD_IF) &&
 				(dhd->dhd_state & DHD_ATTACH_STATE_CFG80211)) {
 				int i;
+#if defined(CUSTOMER_HW4) && defined(WL_CFG80211_P2P_DEV_IF)
+				wl_cfg80211_del_p2p_wdev();
+#endif /* CUSTOMER_HW4 && WL_CFG80211_P2P_DEV_IF */
 
 				dhd_net_if_lock_local(dhd);
 				for (i = 1; i < DHD_MAX_IFS; i++)
@@ -4515,6 +4518,23 @@ auto_mode:
 exit:
 	return ret;
 }
+#ifdef CUSTOMER_HW4
+int dhd_tdls_reset_manual(dhd_pub_t *dhd, struct net_device *dev)
+{
+	int ret;
+
+	if (!FW_SUPPORTED(dhd, tdls))
+		return BCME_ERROR;
+
+	ret = dhd_tdls_enable(dev, false, false, NULL);
+	if (ret < 0)
+		return ret;
+	ret = dhd_tdls_enable(dev, true, false, NULL);
+	if (ret < 0)
+		return ret;
+	return BCME_OK;
+}
+#endif /* CUSTOMER_HW4 */
 int dhd_tdls_enable(struct net_device *dev, bool tdls_on, bool auto_on, struct ether_addr *mac)
 {
 	dhd_info_t *dhd = *(dhd_info_t **)netdev_priv(dev);

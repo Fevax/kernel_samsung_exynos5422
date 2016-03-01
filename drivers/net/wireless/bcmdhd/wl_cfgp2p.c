@@ -2101,9 +2101,6 @@ wl_cfgp2p_down(struct bcm_cfg80211 *cfg)
 			if (index != WL_INVALID)
 				wl_cfgp2p_clear_management_ie(cfg, index);
 	}
-#if defined(WL_CFG80211_P2P_DEV_IF)
-	wl_cfgp2p_del_p2p_disc_if(wdev, cfg);
-#endif /* WL_CFG80211_P2P_DEV_IF */
 	wl_cfgp2p_deinit_priv(cfg);
 	return 0;
 }

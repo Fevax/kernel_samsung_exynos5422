@@ -115,7 +115,7 @@ static int sensor_imx134_power_setpin(struct device *dev)
 		err("failed to get PIN_RESET");
 		return -EINVAL;
 	} else {
-		gpio_request_one(gpio_reset, GPIOF_OUT_INIT_LOW, "CAM_GPIO_OUTPUT_LOW");
+		gpio_request_one(gpio_reset, GPIOF_IN, "CAM_GPIO_INPUT");
 		gpio_free(gpio_reset);
 	}
 
@@ -123,7 +123,7 @@ static int sensor_imx134_power_setpin(struct device *dev)
 	if (!gpio_is_valid(gpios_cam_en)) {
 		err("failed to get main cam en gpio");
 	} else {
-		gpio_request_one(gpios_cam_en, GPIOF_OUT_INIT_LOW, "CAM_GPIO_OUTPUT_LOW");
+		gpio_request_one(gpios_cam_en, GPIOF_IN, "CAM_GPIO_INPUT");
 		gpio_free(gpios_cam_en);
 	}
 
@@ -229,7 +229,7 @@ int sensor_imx134_probe(struct i2c_client *client,
 	ext->actuator_con.peri_setting.i2c.slave_address = 0x34;
 	ext->actuator_con.peri_setting.i2c.speed = 400000;
 
-#ifdef CONFIG_LEDS_MAX77804
+#if defined(CONFIG_LEDS_MAX77804) || defined(CONFIG_LEDS_MAX77888)
 	ext->flash_con.product_name = FLADRV_NAME_MAX77693;
 #endif
 #ifdef CONFIG_LEDS_LM3560

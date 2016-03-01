@@ -599,6 +599,8 @@ struct sec_battery_platform_data {
 #endif
 	sec_charger_functions_t chg_functions_setting;
 
+	bool always_enable;
+
 	/* ADC setting */
 	unsigned int adc_check_count;
 	/* ADC type for each channel */

@@ -1,7 +1,7 @@
 /*
  * Linux cfg80211 driver - Android related functions
  *
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_android.c 500885 2014-09-05 10:06:44Z $
+ * $Id: wl_android.c 526869 2015-01-15 08:20:09Z $
  */
 
 #include <linux/module.h>
@@ -410,9 +410,9 @@ static int lock_cookie_wifi = 'W' | 'i'<<8 | 'F'<<16 | 'i'<<24;	/* cookie is "Wi
 #endif /* ENABLE_4335BT_WAR */
 
 extern bool ap_fw_loaded;
-#if defined(CUSTOMER_HW2) || defined(CUSTOMER_HW4)
+#if defined(CUSTOMER_HW4)
 extern char iface_name[IFNAMSIZ];
-#endif /* CUSTOMER_HW2 || CUSTOMER_HW4 */
+#endif 
 
 /**
  * Local (static) functions and variables
@@ -676,7 +676,7 @@ int wl_android_set_country_rev(
 	int rev = 0;
 
 	memset(country_code, 0, sizeof(country_code));
-	sscanf(command+sizeof("SETCOUNTRYREV"), "%10s %10d", country_code, &rev);
+	sscanf(command+sizeof("SETCOUNTRYREV"), "%3s %10d", country_code, &rev);
 	WL_TRACE(("country_code = %s, rev = %d\n", country_code, rev));
 
 	memcpy(cspec.country_abbrev, country_code, sizeof(country_code));
@@ -1230,7 +1230,7 @@ wls_parse_batching_cmd(struct net_device *dev, char *command, int total_len)
 	int err = BCME_OK;
 	uint i, tokens;
 	char *pos, *pos2, *token, *token2, *delim;
-	char param[PNO_PARAM_SIZE], value[VALUE_SIZE];
+	char param[PNO_PARAM_SIZE+1], value[VALUE_SIZE+1];
 	struct dhd_pno_batch_params batch_params;
 	DHD_PNO(("%s: command=%s, len=%d\n", __FUNCTION__, command, total_len));
 	if (total_len < strlen(CMD_WLS_BATCHING)) {
@@ -1335,7 +1335,7 @@ exit:
 #ifndef WL_SCHED_SCAN
 static int wl_android_set_pno_setup(struct net_device *dev, char *command, int total_len)
 {
-	wlc_ssid_t ssids_local[MAX_PFN_LIST_COUNT];
+	wlc_ssid_ext_t ssids_local[MAX_PFN_LIST_COUNT];
 	int res = -1;
 	int nssid = 0;
 	cmd_tlv_t *cmd_tlv_temp;
@@ -1485,11 +1485,11 @@ static int wl_android_set_cckm_krk(struct net_device *dev, char *command, int to
 
 	memset(iovar_buf, 0, sizeof(iovar_buf));
 	memcpy(key, command+skip_len, key_len);
-	if (key_len == CCKM_KRK_LEN)
-		WL_INFORM(("CCKM(%d) KRK %02X%02X\n", total_len, key[0], key[1]));
-	else
-		WL_INFORM(("CCKM(%d) KRK %02X%02X BTK %02X%02X\n", total_len,
-			key[0], key[1], key[CCKM_KRK_LEN], key[CCKM_KRK_LEN+1]));
+
+	WL_DBG(("CCKM KRK-BTK (%d/%d) :\n", key_len, total_len));
+	if (wl_dbg_level & WL_DBG_DBG) {
+		prhex(NULL, key, key_len);
+	}
 
 	error = wldev_iovar_setbuf(dev, "cckm_krk", key, key_len,
 		iovar_buf, WLC_IOCTL_MEDLEN, NULL);
@@ -1625,19 +1625,28 @@ wl_android_set_mac_address_filter(struct net_device *dev, const char* str)
 	int macmode = MACLIST_MODE_DISABLED;
 	struct maclist *list;
 	char eabuf[ETHER_ADDR_STR_LEN];
+	char *token;
 
 	/* string should look like below (macmode/macnum/maclist) */
 	/*   1 2 00:11:22:33:44:55 00:11:22:33:44:ff  */
 
 	/* get the MAC filter mode */
-	macmode = bcm_atoi(strsep((char**)&str, " "));
+	token = strsep((char**)&str, " ");
+	if (!token) {
+		return -1;
+	}
+	macmode = bcm_atoi(token);
 
 	if (macmode < MACLIST_MODE_DISABLED || macmode > MACLIST_MODE_ALLOW) {
 		DHD_ERROR(("%s : invalid macmode %d\n", __FUNCTION__, macmode));
 		return -1;
 	}
 
-	macnum = bcm_atoi(strsep((char**)&str, " "));
+	token = strsep((char**)&str, " ");
+	if (!token) {
+		return -1;
+	}
+	macnum = bcm_atoi(token);
 	if (macnum < 0 || macnum > MAX_NUM_MAC_FILT) {
 		DHD_ERROR(("%s : invalid number of MAC address entries %d\n",
 			__FUNCTION__, macnum));
@@ -1946,7 +1955,7 @@ wl_android_set_ssid(struct net_device *dev, const char* hapd_ssid)
 	ssid.SSID_len = strlen(hapd_ssid);
 	if (ssid.SSID_len > DOT11_MAX_SSID_LEN) {
 		ssid.SSID_len = DOT11_MAX_SSID_LEN;
-		DHD_ERROR(("%s : Too long SSID Length %d\n", __FUNCTION__, strlen(hapd_ssid)));
+		DHD_ERROR(("%s : Too long SSID Length %zu\n", __FUNCTION__, strlen(hapd_ssid)));
 	}
 	bcm_strncpy_s(ssid.SSID, sizeof(ssid.SSID), hapd_ssid, ssid.SSID_len);
 	DHD_INFO(("%s: HAPD_SSID = %s\n", __FUNCTION__, ssid.SSID));
@@ -2617,8 +2626,9 @@ wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 
 	DHD_INFO(("%s: enter miracast mode %d\n", __FUNCTION__, mode));
 
-	if (miracast_cur_mode == mode)
+	if (miracast_cur_mode == mode) {
 		return 0;
+	}
 
 	wl_android_iolist_resume(dev, &miracast_resume_list);
 	miracast_cur_mode = MIRACAST_MODE_OFF;
@@ -2634,27 +2644,29 @@ wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 			DHD_ERROR(("%s: Connected station's beacon interval: "
 				"%d and set mchan_algo to %d \n",
 				__FUNCTION__, val, config.param));
-		}
-		else {
+		} else {
 			config.param = MIRACAST_MCHAN_ALGO;
 		}
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret)
+		if (ret) {
 			goto resume;
+		}
 
 		/* setting mchan_bw to platform specific value */
 		config.iovar = "mchan_bw";
 		config.param = MIRACAST_MCHAN_BW;
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret)
+		if (ret) {
 			goto resume;
+		}
 
 		/* setting apmdu to platform specific value */
 		config.iovar = "ampdu_mpdu";
 		config.param = MIRACAST_AMPDU_SIZE;
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret)
+		if (ret) {
 			goto resume;
+		}
 		/* FALLTROUGH */
 		/* Source mode shares most configurations with sink mode.
 		 * Fall through here to avoid code duplication
@@ -2664,17 +2676,27 @@ wl_android_set_miracast(struct net_device *dev, char *command, int total_len)
 		config.iovar = "roam_off";
 		config.param = 1;
 		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret)
+		if (ret) {
 			goto resume;
+		}
+
 		/* tunr off pm */
-		val = 0;
-		config.iovar = NULL;
-		config.ioctl = WLC_GET_PM;
-		config.arg = &val;
-		config.len = sizeof(int);
-		ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
-		if (ret)
+		ret = wldev_ioctl(dev, WLC_GET_PM, &val, sizeof(val), false);
+		if (ret) {
 			goto resume;
+		}
+
+		if (val != PM_OFF) {
+			val = PM_OFF;
+			config.iovar = NULL;
+			config.ioctl = WLC_GET_PM;
+			config.arg = &val;
+			config.len = sizeof(int);
+			ret = wl_android_iolist_add(dev, &miracast_resume_list, &config);
+			if (ret) {
+				goto resume;
+			}
+		}
 
 		break;
 	case MIRACAST_MODE_OFF:
@@ -2824,15 +2846,18 @@ static int wl_android_get_ibss_peer_info(struct net_device *dev, char *command,
 	int i;
 	bool found = false;
 	struct ether_addr mac_ea;
+	char *str = command;
 
 	WL_DBG(("get ibss peer info(%s)\n", bAll?"true":"false"));
 
 	if (!bAll) {
-		if (sscanf (command, "GETIBSSPEERINFO %02x:%02x:%02x:%02x:%02x:%02x",
-			(unsigned int *)&mac_ea.octet[0], (unsigned int *)&mac_ea.octet[1],
-			(unsigned int *)&mac_ea.octet[2], (unsigned int *)&mac_ea.octet[3],
-			(unsigned int *)&mac_ea.octet[4], (unsigned int *)&mac_ea.octet[5]) != 6) {
-			WL_DBG(("invalid MAC address\n"));
+		if (bcmstrtok(&str, " ", NULL) == NULL) {
+			WL_ERR(("invalid command\n"));
+			return -1;
+		}
+
+		if (!str || !bcm_ether_atoe(str, &mac_ea)) {
+			WL_ERR(("invalid MAC address\n"));
 			return -1;
 		}
 	}
@@ -3177,7 +3202,12 @@ wl_android_set_roam_offload_bssid_list(struct net_device *dev, const char *cmd)
 
 	for (i = 0; i < cnt; i++) {
 		str = get_string_by_separator(sbuf, 32, str, ',');
-		bcm_ether_atoe(sbuf, &bssid_list->bssid[i]);
+		if (bcm_ether_atoe(sbuf, &bssid_list->bssid[i]) == 0) {
+			DHD_ERROR(("%s: Invalid station MAC Address!!!\n", __FUNCTION__));
+			kfree(bssid_list);
+			kfree(ioctl_buf);
+			return -1;
+		}
 	}
 
 	bssid_list->cnt = cnt;
@@ -3887,12 +3917,12 @@ int wl_android_init(void)
 #ifdef ENABLE_INSMOD_NO_FW_LOAD
 	dhd_download_fw_on_driverload = FALSE;
 #endif /* ENABLE_INSMOD_NO_FW_LOAD */
-#if defined(CUSTOMER_HW2) || defined(CUSTOMER_HW4)
+#if defined(CUSTOMER_HW4)
 	if (!iface_name[0]) {
 		memset(iface_name, 0, IFNAMSIZ);
 		bcm_strncpy_s(iface_name, IFNAMSIZ, "wlan", IFNAMSIZ);
 	}
-#endif /* CUSTOMER_HW2 || CUSTOMER_HW4 */
+#endif 
 
 #ifdef WL_GENL
 	wl_genl_init();

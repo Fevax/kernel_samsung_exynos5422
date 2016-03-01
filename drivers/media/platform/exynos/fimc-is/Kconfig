@@ -180,3 +180,10 @@ config CAMERA_SENSOR_TEMP
         default n
         help
           Use to build camera sensor temp.
+config CAMERA_ONLY_SUPPORT_FRONT
+        bool "Support only front camera temporarilly"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          Use to support only front camera temporarilly.
+          This config should be removed after bring-up.

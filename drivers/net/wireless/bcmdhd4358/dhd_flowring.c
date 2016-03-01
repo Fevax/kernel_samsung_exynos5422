@@ -1,6 +1,6 @@
 /*
  * Broadcom Dongle Host Driver (DHD), Flow ring specific code at top level
- * Copyright (C) 1999-2014, Broadcom Corporation
+ * Copyright (C) 1999-2015, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -245,8 +245,6 @@ dhd_flow_rings_init(dhd_pub_t *dhdp, uint32 num_flow_rings)
 	return BCME_OK;
 
 fail:
-	if (lock != NULL)
-		dhd_os_spin_lock_deinit(dhdp->osh, lock);
 	/* Destruct the per interface flow lkup table */
 	if (dhdp->if_flow_lkup != NULL) {
 		DHD_OS_PREFREE(dhdp, if_flow_lkup, if_flow_lkup_sz);
