@@ -518,11 +518,9 @@ CONFIG_INCREASE_MAXIMUM_SWAPPINESS=y
 CONFIG_FIX_INACTIVE_RATIO=y
 CONFIG_TIGHT_PGDAT_BALANCE=y
 # CONFIG_SWAP_ENABLE_READAHEAD is not set
-# CONFIG_BALANCE_ANON_FILE_RECLAIM is not set
 # CONFIG_OOM_SCAN_WA_PREVENT_WRONG_SEARCH is not set
 CONFIG_SDP_CACHE_CLEANUP=y
 CONFIG_MIN_DIRTY_THRESH_PAGES=2560
-CONFIG_MMAP_READAROUND_LIMIT=0
 CONFIG_FORCE_MAX_ZONEORDER=11
 CONFIG_ALIGNMENT_TRAP=y
 # CONFIG_UACCESS_WITH_MEMCPY is not set
@@ -541,7 +539,7 @@ CONFIG_ATAGS=y
 CONFIG_ZBOOT_ROM_TEXT=0x0
 CONFIG_ZBOOT_ROM_BSS=0x0
 # CONFIG_ARM_APPENDED_DTB is not set
-CONFIG_CMDLINE="console=ram loglevel=4 sec_debug.level=0 sec_watchdog.sec_pet=5 printk.core_num=1 androidboot.debug_level=0x4f4c sec_log=0x200000@0x46000000 sec_avc_log=0x40000@0x46404000 s3cfb.bootloaderfb=0x87000000 lcdtype=6301715 consoleblank=0 vmalloc=256m sec_debug.reset_reason=9 oops=panic pmic_info=83 androidboot.selinux=permissive androidboot.hardware=universal5422 snd_soc_core.pmdown_time=1000"
+CONFIG_CMDLINE="console=ram loglevel=4 sec_debug.level=0 sec_watchdog.sec_pet=5 printk.core_num=1 androidboot.debug_level=0x4f4c sec_log=0x200000@0x46000000 sec_avc_log=0x40000@0x46404000 s3cfb.bootloaderfb=0x87000000 lcdtype=6301715 consoleblank=0 vmalloc=256m sec_debug.reset_reason=9 oops=panic pmic_info=83 androidboot.selinux=disabled androidboot.hardware=universal5422 snd_soc_core.pmdown_time=1000"
 # CONFIG_CMDLINE_FROM_BOOTLOADER is not set
 # CONFIG_CMDLINE_EXTEND is not set
 CONFIG_CMDLINE_FORCE=y
