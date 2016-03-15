@@ -35,7 +35,6 @@
 #include "../fimc-is-core.h"
 #include "../fimc-is-device-sensor.h"
 #include "../fimc-is-resourcemgr.h"
-#include "../fimc-is-hw.h"
 #include "fimc-is-device-imx135.h"
 
 #define SENSOR_NAME "IMX135"
@@ -116,13 +115,10 @@ int sensor_imx135_probe(struct i2c_client *client,
 	module->pixel_width = module->active_width + 16;
 	module->pixel_height = module->active_height + 10;
 	module->max_framerate = 120;
-	module->sensor_maker = "SONY";
-	module->sensor_name = "IMX135";
 	module->setfile_name = "setfile_imx135.bin";
 	module->cfgs = ARRAY_SIZE(config_imx135);
 	module->cfg = config_imx135;
 	module->private_data = NULL;
-	module->lanes = CSI_DATA_LANES_4;
 
 	ext = &module->ext;
 	memset(ext, 0x0, sizeof(struct sensor_open_extended));
@@ -152,11 +148,11 @@ int sensor_imx135_probe(struct i2c_client *client,
 
 	ext->companion_con.product_name = COMPANION_NAME_NOTHING;
 
-	if (client)
-		v4l2_i2c_subdev_init(subdev_module, client, &subdev_ops);
-	else
-		v4l2_subdev_init(subdev_module, &subdev_ops);
-
+#ifdef DEFAULT_IMX135_DRIVING
+	v4l2_i2c_subdev_init(subdev_module, client, &subdev_ops);
+#else
+	v4l2_subdev_init(subdev_module, &subdev_ops);
+#endif
 	v4l2_set_subdevdata(subdev_module, module);
 	v4l2_set_subdev_hostdata(subdev_module, device);
 	snprintf(subdev_module->name, V4L2_SUBDEV_NAME_SIZE, "sensor-subdev.%d", module->id);

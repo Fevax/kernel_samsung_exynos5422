@@ -20,128 +20,49 @@
 /* #define ENABLE_TDNR */
 #define ENABLE_FD
 #define ENABLE_CLOCK_GATE
-/* #define HAS_FW_CLOCK_GATE */
+#define HAS_FW_CLOCK_GATE
 /* #define ENABLE_CACHE */
 #define ENABLE_FULL_BYPASS
 #define ENABLE_FAST_SHOT
 #define USE_OWN_FAULT_HANDLER
 /* #define ENABLE_MIF_400 */
-#define ENABLE_DTP
-#define USE_ION_ALLOC
-
-#define CSI_VERSION_0000_0000	0x0
-#define CSI_VERSION_0310_0100	0x03100100
-
-#define FIMC_IS_VERSION_000	0x0
-#define FIMC_IS_VERSION_250	0x250
+/* #define ENABLE_DTP */
 
 #if defined(CONFIG_PM_DEVFREQ)
 #define ENABLE_DVFS
-#define START_DVFS_LEVEL FIMC_IS_SN_MAX
+#define START_DVFS_LEVEL FIMC_IS_SN_REAR_PREVIEW_FHD
 #endif
 
 #if defined(CONFIG_SOC_EXYNOS5430)
 #undef ENABLE_SETFILE
 #define SUPPORTED_IS_CMD_VER	132
 #define TARGET_SPI_CH_FOR_PERI	0
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0000_0000
-#define FIMC_IS_VERSION		FIMC_IS_VERSION_000
-#define HAS_FW_CLOCK_GATE
+#endif
 
-#elif defined(CONFIG_SOC_EXYNOS5433)
-#define SUPPORTED_IS_CMD_VER	132
-#define TARGET_SPI_CH_FOR_PERI	0
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0000_0000
-#define FIMC_IS_VERSION	FIMC_IS_VERSION_000
-#define HAS_FW_CLOCK_GATE
-#define MAX_ZOOM_LEVEL 8
-
-#elif defined(CONFIG_SOC_EXYNOS5422)
+#if defined(CONFIG_SOC_EXYNOS5422)
 #undef ENABLE_SETFILE
 #define SUPPORTED_IS_CMD_VER	132
 #define TARGET_SPI_CH_FOR_PERI	0
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0000_0000
-#define FIMC_IS_VERSION		FIMC_IS_VERSION_000
+#undef HAS_FW_CLOCK_GATE
+#endif
 
-#elif defined(CONFIG_SOC_EXYNOS5260)
+#if defined(CONFIG_SOC_EXYNOS5260)
 #undef ENABLE_SETFILE
 #undef ENABLE_DRC
 #undef ENABLE_FULL_BYPASS
 #define SUPPORTED_EARLY_BUF_DONE
 #define SUPPORTED_IS_CMD_VER	131
 #define TARGET_SPI_CH_FOR_PERI	1
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0310_0100
-#define FIMC_IS_VERSION		FIMC_IS_VERSION_000
-#define SCALER_PARALLEL_MODE
+#endif
 
-#elif defined(CONFIG_SOC_EXYNOS4415)
-#undef ENABLE_SETFILE
-#undef ENABLE_DRC
-#define SUPPORTED_IS_CMD_VER	132
-#define TARGET_SPI_CH_FOR_PERI	1
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0310_0100
-#define FIMC_IS_VERSION		FIMC_IS_VERSION_250
-
-#elif defined(CONFIG_SOC_EXYNOS3470)
-#undef ENABLE_SETFILE
-#undef ENABLE_DRC
-#undef ENABLE_FULL_BYPASS
-#define SUPPORTED_EARLY_BUF_DONE
-#define ENABLE_IFLAG
-#define SUPPORTED_IS_CMD_VER	131
-#define TARGET_SPI_CH_FOR_PERI	1
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0000_0000
-#define FIMC_IS_VERSION		FIMC_IS_VERSION_000
-#define SCALER_PARALLEL_MODE
-
-#elif defined(CONFIG_SOC_EXYNOS3472)
+#if defined(CONFIG_SOC_EXYNOS3470)
 #undef ENABLE_SETFILE
 #undef ENABLE_DRC
 #undef ENABLE_DVFS
 #undef ENABLE_FULL_BYPASS
-#define ENABLE_IFLAG
 #define SUPPORTED_IS_CMD_VER	131
 #define TARGET_SPI_CH_FOR_PERI	1
-#define FIMC_IS_CSI_VERSION	CSI_VERSION_0310_0100
-#define FIMC_IS_VERSION		FIMC_IS_VERSION_000
-
-#else
-#error fimc-is driver can NOT support this platform
-
 #endif
-
-#if !defined(MAX_ZOOM_LEVEL)
-/* default max zoom lv is 4 */
-#define MAX_ZOOM_LEVEL 4
-#endif
-
-/* notifier for MIF throttling */
-#if defined(CONFIG_ARM_EXYNOS5433_BUS_DEVFREQ) && defined(CONFIG_CPU_THERMAL_IPA)
-#define EXYNOS_MIF_ADD_NOTIFIER(nb) \
-	exynos_mif_add_notifier(nb)
-#else
-#define EXYNOS_MIF_ADD_NOTIFIER(nb)
-#endif
-
-#if defined(CONFIG_ARM_EXYNOS4415_BUS_DEVFREQ)
-#define CONFIG_FIMC_IS_BUS_DEVFREQ
-#endif
-#if defined(CONFIG_ARM_EXYNOS5260_BUS_DEVFREQ)
-#define CONFIG_FIMC_IS_BUS_DEVFREQ
-#endif
-#if defined(CONFIG_ARM_EXYNOS3470_BUS_DEVFREQ)
-#define CONFIG_FIMC_IS_BUS_DEVFREQ
-#endif
-#if defined(CONFIG_ARM_EXYNOS5422_BUS_DEVFREQ)
-#define CONFIG_FIMC_IS_BUS_DEVFREQ
-#endif
-#if defined(CONFIG_ARM_EXYNOS5430_BUS_DEVFREQ)
-#define CONFIG_FIMC_IS_BUS_DEVFREQ
-#endif
-#if defined(CONFIG_ARM_EXYNOS5433_BUS_DEVFREQ)
-#define CONFIG_FIMC_IS_BUS_DEVFREQ
-#endif
-
 /*
  * -----------------------------------------------------------------------------
  * Debug Message Configuration
@@ -157,7 +78,6 @@
 #define BUG_ON_ENABLE
 /* #define FIXED_FPS_DEBUG */
 #define FIXED_FPS_VALUE 10
-/* #define DBG_CSIISR */
 /* #define DBG_FLITEISR */
 #define FW_DEBUG
 #define RESERVED_MEM
@@ -167,8 +87,6 @@
 /* #define PRINT_CAPABILITY */
 /* #define PRINT_BUFADDR */
 /* #define PRINT_DZOOM */
-/* #define PRINT_PARAM */
-/* #define PRINT_I2CCMD */
 #define ISDRV_VERSION 244
 
 #if (defined(BAYER_CROP_DZOOM) && defined(SCALER_CROP_DZOOM))
@@ -192,10 +110,6 @@
 #define GET_3AA_ID(video) ((video->id < 14) ? 0 : 1)
 #define GET_3AAC_ID(video) ((video->id < FIMC_IS_VIDEO_3A1_NUM) ? 0 : 1)
 
-/* sync log with HAL, FW */
-#define log_sync(sync_id) \
-	pr_info("[@]FIMC_IS_SYNC %d\n", sync_id)
-
 #ifdef err
 #undef err
 #endif
@@ -210,10 +124,6 @@
 #define mrerr(fmt, object, frame, args...) \
 	pr_err("[@][%d:F%d][ERR]%s:%d: " fmt "\n", object->instance, frame->fcount, __func__, __LINE__, ##args)
 
-/* multi-stream & group error */
-#define mgerr(fmt, object, group, args...) \
-        pr_err("[@][%d][GP%d][ERR]%s:%d:" fmt "\n", object->instance, group->id, __func__, __LINE__, ##args)
-
 #ifdef warn
 #undef warn
 #endif
@@ -223,9 +133,6 @@
 #define mwarn(fmt, this, args...) \
 	pr_warning("[@][%d][WRN] " fmt "\n", this->instance, ##args)
 
-#define mgwarn(fmt, object, group, args...) \
-        pr_warning("[@][%d][GP%d][WRN]" fmt "\n", object->instance, group->id, ##args)
-
 #define info(fmt, args...) \
 	pr_info("[@]" fmt, ##args)
 
@@ -234,9 +141,6 @@
 
 #define mrinfo(fmt, object, frame, args...) \
 	pr_info("[@][%d:F%d]" fmt, object->instance, frame->fcount,  ##args)
-
-#define mrdbg(fmt, object, frame, args...) \
-	printk(KERN_DEBUG "[@][%d:F%d]" fmt, object->instance, frame->fcount,  ##args)
 
 #define mdbg_common(prefix, fmt, instance, args...)				\
 	do {									\
@@ -252,7 +156,7 @@
 
 /* debug message for video node */
 #define mdbgv_vid(fmt, args...) \
-	pr_info("[@][VID:V] " fmt, ##args)
+	pr_info("[@][COM:V] " fmt, ##args)
 
 #define mdbgv_sensor(fmt, this, args...) \
 	mdbg_common("[%d][SS%d:V] ", fmt, this->video->id, this->instance, ##args)

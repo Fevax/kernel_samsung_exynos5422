@@ -363,25 +363,24 @@ static int jpeg_m2m_open(struct file *file)
 {
 	struct jpeg_dev *jpeg = video_drvdata(file);
 	struct jpeg_ctx *ctx = NULL;
-	int ret = -ENOMEM;
+	int ret = 0;
 
 	ctx = kzalloc(sizeof *ctx, GFP_KERNEL);
 	if (!ctx) {
 		printk(KERN_ERR "ctx is null\n");
-		return -ENOMEM;
 	}
 
 	ctx->param.tables = kzalloc(sizeof(struct jpeg_tables), GFP_KERNEL);
 	if (!ctx->param.tables) {
 		printk(KERN_ERR "jpeg_tables is null\n");
-		goto err_table;
+		return -ENOMEM;
 	}
 	memset(ctx->param.tables, 0, sizeof(struct jpeg_tables));
 
 	ctx->param.tinfo = kzalloc(sizeof(struct jpeg_tables_info), GFP_KERNEL);
 	if (!ctx->param.tinfo) {
 		printk(KERN_ERR "jpeg_tables_info is null\n");
-		goto err_tinfo;
+		return -ENOMEM;
 	}
 
 	file->private_data = ctx;
@@ -396,19 +395,13 @@ static int jpeg_m2m_open(struct file *file)
 
 	if (IS_ERR(ctx->m2m_ctx)) {
 		ret = PTR_ERR(ctx->m2m_ctx);
-		goto err_ctx;
+		kfree(ctx);
+		return ret;
 	}
 
 	pm_runtime_get_sync(&jpeg->plat_dev->dev);
 
 	return 0;
-err_ctx:
-	kfree(ctx->param.tinfo);
-err_tinfo:
-	kfree(ctx->param.tables);
-err_table:
-	kfree(ctx);
-	return ret;
 }
 
 static int jpeg_m2m_release(struct file *file)
@@ -749,7 +742,6 @@ static int jpeg_probe(struct platform_device *pdev)
 	jpeg->reg_base = devm_request_and_ioremap(&pdev->dev, res);
 	if (jpeg->reg_base == NULL) {
 		dev_err(&pdev->dev, "failed to claim register region\n");
-		mutex_destroy(&jpeg->lock);
 		return -ENOENT;
 	}
 
@@ -757,7 +749,6 @@ static int jpeg_probe(struct platform_device *pdev)
 	jpeg->irq_no = platform_get_irq(pdev, 0);
 	if (jpeg->irq_no < 0) {
 		jpeg_err("failed to get jpeg memory region resource\n");
-		mutex_destroy(&jpeg->lock);
 		return jpeg->irq_no;
 	}
 
@@ -766,16 +757,13 @@ static int jpeg_probe(struct platform_device *pdev)
 			pdev->name, jpeg);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to install irq\n");
-		mutex_destroy(&jpeg->lock);
 		return ret;
 	}
 
 	/* clock */
 	ret = jpeg_clk_get(jpeg);
-	if (ret) {
-		mutex_destroy(&jpeg->lock);
+	if (ret)
 		return ret;
-	}
 
 	ret = v4l2_device_register(&pdev->dev, &jpeg->v4l2_dev);
 	if (ret) {
@@ -853,7 +841,6 @@ err_vd_alloc:
 	v4l2_device_unregister(&jpeg->v4l2_dev);
 err_v4l2:
 	jpeg_clk_put(jpeg);
-	mutex_destroy(&jpeg->lock);
 	return ret;
 
 }

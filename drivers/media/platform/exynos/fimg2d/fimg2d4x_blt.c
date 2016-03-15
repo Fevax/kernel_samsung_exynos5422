@@ -180,27 +180,6 @@ static int fimg2d4x_get_clk_cnt(struct clk *clk)
 }
 #endif
 
-#ifdef CONFIG_EXYNOS7_IOMMU
-static void fimg2d4x_cleanup_pgtable(struct fimg2d_control *ctrl,
-					struct fimg2d_bltcmd *cmd,
-					enum image_object idx,
-					bool plane2)
-{
-	if (cmd->dma[idx].base.size > 0) {
-		exynos_sysmmu_unmap_user_pages(ctrl->dev,
-				cmd->ctx->mm, cmd->dma[idx].base.addr,
-				cmd->dma[idx].base.size);
-	}
-
-	if (plane2 && cmd->dma[idx].plane2.size > 0) {
-		exynos_sysmmu_unmap_user_pages(ctrl->dev,
-				cmd->ctx->mm, cmd->dma[idx].plane2.addr,
-				cmd->dma[idx].plane2.size);
-	}
-}
-#else
-#define fimg2d4x_cleanup_pgtable(ctrl, cmd, idx, plane2)	do { } while (0)
-#endif
 static int fimg2d4x_blit_wait(struct fimg2d_control *ctrl,
 		struct fimg2d_bltcmd *cmd)
 {
@@ -215,7 +194,7 @@ static int fimg2d4x_blit_wait(struct fimg2d_control *ctrl,
 		if (!fimg2d4x_blit_done_status(ctrl))
 			fimg2d_err("blit not finished\n");
 
-		fimg2d_debug_command(cmd);
+		fimg2d_dump_command(cmd);
 		fimg2d4x_reset(ctrl);
 
 		return -1;
@@ -234,7 +213,6 @@ static void fimg2d4x_pre_bitblt(struct fimg2d_control *ctrl,
 		break;
 
 	case IP_VER_G2D_5H:
-	case IP_VER_G2D_5HP:
 #ifndef CCI_SNOOP
 		/* disable cci path */
 		g2d_cci_snoop_control(ctrl->pdata->ip_ver,
@@ -278,8 +256,6 @@ int fimg2d4x_bitblt(struct fimg2d_control *ctrl)
 			fimg2d_err("2D clock is not set\n");
 #endif
 
-		addr_type = cmd->image[IDST].addr.type;
-
 		atomic_set(&ctrl->busy, 1);
 		perf_start(cmd, PERF_SFR);
 		ret = ctrl->configure(ctrl, cmd);
@@ -290,35 +266,36 @@ int fimg2d4x_bitblt(struct fimg2d_control *ctrl)
 			goto fail_n_del;
 		}
 
+		addr_type = cmd->image[IDST].addr.type;
+
 		ctx->vma_lock = vma_lock_mapping(ctx->mm, prefbuf, MAX_IMAGES - 1);
 
 		if (fimg2d_check_pgd(ctx->mm, cmd)) {
 			ret = -EFAULT;
-			goto fail_n_unmap;
+			goto fail_n_del;
 		}
 
 		if (addr_type == ADDR_USER || addr_type == ADDR_USER_CONTIG) {
 			if (!ctx->mm || !ctx->mm->pgd) {
 				atomic_set(&ctrl->busy, 0);
 				fimg2d_err("ctx->mm:0x%p or ctx->mm->pgd:0x%p\n",
-					       ctx->mm,
-					       (ctx->mm) ? ctx->mm->pgd : NULL);
+					       ctx->mm, ctx->mm->pgd);
 				ret = -EPERM;
-				goto fail_n_unmap;
+				goto fail_n_del;
 			}
 			pgd = (unsigned long *)ctx->mm->pgd;
 #ifdef CONFIG_EXYNOS7_IOMMU
 			if (iovmm_activate(ctrl->dev)) {
 				fimg2d_err("failed to iovmm activate\n");
 				ret = -EPERM;
-				goto fail_n_unmap;
+				goto fail_n_del;
 			}
 #else
 			if (exynos_sysmmu_enable(ctrl->dev,
 					(unsigned long)virt_to_phys(pgd))) {
 				fimg2d_err("failed to sysmme enable\n");
 				ret = -EPERM;
-				goto fail_n_unmap;
+				goto fail_n_del;
 			}
 #endif
 			fimg2d_debug("%s : sysmmu enable: pgd %p ctx %p seq_no(%u)\n",
@@ -337,20 +314,31 @@ int fimg2d4x_bitblt(struct fimg2d_control *ctrl)
 		ret = fimg2d4x_blit_wait(ctrl, cmd);
 		perf_end(cmd, PERF_BLIT);
 
-#ifdef CONFIG_EXYNOS7_IOMMU
-		if (addr_type == ADDR_USER || addr_type == ADDR_USER_CONTIG)
-			iovmm_deactivate(ctrl->dev);
-#else
-		if (addr_type == ADDR_USER || addr_type == ADDR_USER_CONTIG)
-			exynos_sysmmu_disable(ctrl->dev);
-#endif
-
-fail_n_unmap:
 		perf_start(cmd, PERF_UNMAP);
 		if (addr_type == ADDR_USER || addr_type == ADDR_USER_CONTIG) {
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, IMSK, false);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, IDST, true);
+#ifdef CONFIG_EXYNOS7_IOMMU
+			if (cmd->image[ISRC].addr.type) {
+				exynos_sysmmu_unmap_user_pages(ctrl->dev,
+					ctx->mm, cmd->dma[ISRC].base.addr,
+					cmd->dma[ISRC].base.size);
+			}
+
+			if (cmd->image[IMSK].addr.type) {
+				exynos_sysmmu_unmap_user_pages(ctrl->dev,
+					ctx->mm, cmd->dma[IMSK].base.addr,
+					cmd->dma[IMSK].base.size);
+			}
+
+			if (cmd->image[IDST].addr.type) {
+				exynos_sysmmu_unmap_user_pages(ctrl->dev,
+					ctx->mm, cmd->dma[IDST].base.addr,
+					cmd->dma[IDST].base.size);
+			}
+
+			iovmm_deactivate(ctrl->dev);
+#else
+			exynos_sysmmu_disable(ctrl->dev);
+#endif
 			fimg2d_debug("sysmmu disable\n");
 		}
 		perf_end(cmd, PERF_UNMAP);
@@ -541,7 +529,7 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 				cmd->dma[ISRC].base.addr,
 				cmd->dma[ISRC].base.size, 0);
 		if (IS_ERR_VALUE(ret)) {
-			fimg2d_err("s/w fallback (%d-0:%d)\n", ISRC, ret);
+			fimg2d_err("failed to map src buffer in plane2 for sysmmu\n");
 			return ret;
 		}
 
@@ -551,8 +539,7 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 					cmd->dma[ISRC].plane2.addr,
 					cmd->dma[ISRC].plane2.size, 0);
 			if (IS_ERR_VALUE(ret)) {
-				fimg2d_err("s/w fallback (%d-1:%d)\n", ISRC, ret);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, false);
+				fimg2d_err("failed to map src buffer for sysmmu\n");
 				return ret;
 			}
 		}
@@ -581,8 +568,7 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 				cmd->dma[IMSK].base.addr,
 				cmd->dma[IMSK].base.size, 0);
 		if (IS_ERR_VALUE(ret)) {
-			fimg2d_err("s/w fallback (%d:%d)\n", IMSK, ret);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
+			fimg2d_err("failed to map msk buffer for sysmmu\n");
 			return ret;
 		}
 #endif
@@ -613,24 +599,19 @@ static int fimg2d4x_configure(struct fimg2d_control *ctrl,
 		ret = exynos_sysmmu_map_user_pages(
 				ctrl->dev, cmd->ctx->mm,
 				cmd->dma[IDST].base.addr,
-				cmd->dma[IDST].base.size, 1);
+				cmd->dma[IDST].base.size, 0);
 		if (IS_ERR_VALUE(ret)) {
-			fimg2d_err("s/w fallback (%d-0:%d)\n", IDST, ret);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
-			fimg2d4x_cleanup_pgtable(ctrl, cmd, IMSK, false);
+			fimg2d_err("failed to map dst buffer for sysmmu\n");
 			return ret;
 		}
 
-		if (dst->order == P2_CRCB || dst->order == P2_CBCR) {
+		if (src->order == P2_CRCB || src->order == P2_CBCR) {
 			ret = exynos_sysmmu_map_user_pages(
 					ctrl->dev, cmd->ctx->mm,
 					cmd->dma[IDST].plane2.addr,
-					cmd->dma[IDST].plane2.size, 1);
+					cmd->dma[IDST].plane2.size, 0);
 			if (IS_ERR_VALUE(ret)) {
-				fimg2d_err("s/w fallback (%d-1:%d)\n", IDST, ret);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, ISRC, true);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, IMSK, false);
-				fimg2d4x_cleanup_pgtable(ctrl, cmd, IDST, false);
+				fimg2d_err("failed to map dst buffer in plane2 for sysmmu\n");
 				return ret;
 			}
 		}

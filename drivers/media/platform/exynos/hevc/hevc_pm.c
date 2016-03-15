@@ -30,6 +30,49 @@ static struct hevc_pm *pm;
 atomic_t clk_ref_hevc;
 static int power_on_flag;
 
+#if defined(CONFIG_ARCH_EXYNOS4)
+
+#define HEVC_PARENT_CLK_NAME	"mout_hevc0"
+#define HEVC_CLKNAME		"sclk_hevc"
+#define HEVC_GATE_CLK_NAME	"hevc"
+
+int hevc_init_pm(struct hevc_dev *dev)
+{
+	struct clk *parent, *sclk;
+	int ret = 0;
+
+	pm = &dev->pm;
+
+	parent = clk_get(dev->device, "gate_hevc");
+	if (IS_ERR(parent)) {
+		printk(KERN_ERR "failed to get parent clock\n");
+		ret = -ENOENT;
+		goto err_p_clk;
+	}
+
+	ret = clk_prepare(parent);
+	if (ret) {
+		printk(KERN_ERR "clk_prepare() failed\n");
+		return ret;
+	}
+
+	atomic_set(&pm->power, 0);
+	atomic_set(&clk_ref_hevc, 0);
+
+	pm->device = dev->device;
+	pm_runtime_enable(pm->device);
+
+	return 0;
+
+err_g_clk:
+	clk_put(sclk);
+err_s_clk:
+	clk_put(parent);
+err_p_clk:
+	return ret;
+}
+
+#elif defined(CONFIG_ARCH_EXYNOS5)
 
 #define HEVC_PARENT_CLK_NAME	"aclk_333"
 #define HEVC_CLKNAME		"sclk_hevc"
@@ -81,24 +124,15 @@ int hevc_set_clock_parent(struct hevc_dev *dev)
 	}
 	clk_parent = clk_get(dev->device, "aclk_hevc_400");
 	if (IS_ERR(clk_parent)) {
-		clk_put(clk_child);
 		pr_err("failed to get %s clock\n", __clk_get_name(clk_parent));
 		return PTR_ERR(clk_parent);
 	}
-	/* before set mux register, all source clock have to enabled */
-	clk_prepare_enable(clk_parent);
-	if (clk_set_parent(clk_child, clk_parent)) {
-		pr_err("Unable to set parent %s of clock %s \n",
-			__clk_get_name(clk_parent), __clk_get_name(clk_child));
-	}
-	/* expected hevc related ref clock value be set above 1 */
-	clk_put(clk_child);
-	clk_put(clk_parent);
+	clk_set_parent(clk_child, clk_parent);
 
 	return 0;
 }
 
-#ifdef CONFIG_HEVC_USE_BUS_DEVFREQ
+#ifdef CONFIG_ARM_EXYNOS5430_BUS_DEVFREQ
 static int hevc_clock_set_rate(struct hevc_dev *dev, unsigned long rate)
 {
 	struct clk *parent_clk = NULL;
@@ -121,6 +155,7 @@ err_g_clk:
 	return ret;
 }
 #endif
+#endif
 
 void hevc_final_pm(struct hevc_dev *dev)
 {
@@ -136,7 +171,7 @@ int hevc_clock_on(void)
 	struct hevc_dev *dev = platform_get_drvdata(to_platform_device(pm->device));
 	unsigned long flags;
 
-#ifdef CONFIG_HEVC_USE_BUS_DEVFREQ
+#ifdef CONFIG_ARM_EXYNOS5430_BUS_DEVFREQ
 	hevc_clock_set_rate(dev, dev->curr_rate);
 #endif
 	ret = clk_enable(pm->clock);
@@ -209,54 +244,15 @@ int hevc_power_on(void)
 
 	power_on_flag = 1;
 	return pm_runtime_get_sync(pm->device);
+	return 0;
 }
 
-int hevc_power_off(struct hevc_dev *dev)
+int hevc_power_off(void)
 {
-	struct clk *clk_child = NULL;
-	struct clk *clk_parent = NULL;
-	struct clk *clk_old_parent = NULL;
-
-	clk_old_parent = clk_get(dev->device, "aclk_hevc_400");
-	if (IS_ERR(clk_old_parent)) {
-		pr_err("failed to get %s clock\n", __clk_get_name(clk_old_parent));
-		return PTR_ERR(clk_old_parent);
-	}
-	clk_child = clk_get(dev->device, "mout_aclk_hevc_400_user");
-	if (IS_ERR(clk_child)) {
-		clk_put(clk_old_parent);
-		pr_err("failed to get %s clock\n", __clk_get_name(clk_child));
-		return PTR_ERR(clk_child);
-	}
-	clk_parent = clk_get(dev->device, "oscclk");
-	if (IS_ERR(clk_parent)) {
-		clk_put(clk_child);
-		clk_put(clk_old_parent);
-		pr_err("failed to get %s clock\n", __clk_get_name(clk_parent));
-		return PTR_ERR(clk_parent);
-	}
-	/* before set mux register, all source clock have to enabled */
-	clk_prepare_enable(clk_parent);
-	if (clk_set_parent(clk_child, clk_parent)) {
-		pr_err("Unable to set parent %s of clock %s \n",
-			__clk_get_name(clk_parent), __clk_get_name(clk_child));
-	}
-	clk_disable_unprepare(clk_parent);
-	clk_disable_unprepare(clk_old_parent);
-
-	clk_put(clk_child);
-	clk_put(clk_parent);
-	clk_put(clk_old_parent);
-	/* expected hevc related ref clock value be set 0 */
-
 	atomic_set(&pm->power, 0);
 
 	return pm_runtime_put_sync(pm->device);
-}
-
-void hevc_set_power_flag(void)
-{
-	power_on_flag = 1;
+	return 0;
 }
 
 int hevc_get_clk_ref_cnt(void)

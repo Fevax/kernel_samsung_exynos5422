@@ -54,7 +54,9 @@ int s5p_mfc_alloc_firmware(struct s5p_mfc_dev *dev)
 
 	mfc_debug(2, "Allocating memory for firmware.\n");
 
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
 	alloc_ctx = dev->alloc_ctx_fw;
+#endif
 
 	dev->fw_info.alloc = s5p_mfc_mem_alloc_priv(alloc_ctx, firmware_size);
 	if (IS_ERR(dev->fw_info.alloc)) {
@@ -527,9 +529,9 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 		return ret;
 	}
 
-	spin_lock_irq(&dev->condlock);
+	spin_lock(&dev->condlock);
 	set_bit(ctx->num, &dev->hw_lock);
-	spin_unlock_irq(&dev->condlock);
+	spin_unlock(&dev->condlock);
 
 	s5p_mfc_clock_on(dev);
 	s5p_mfc_clean_dev_int_flags(dev);
@@ -571,9 +573,6 @@ int s5p_mfc_wakeup(struct s5p_mfc_dev *dev)
 		mfc_err("no mfc device to run\n");
 		return -EINVAL;
 	}
-
-	/* Set clock source again after wake up */
-	s5p_mfc_set_clock_parent(dev);
 
 	/* 0. MFC reset */
 	mfc_debug(2, "MFC reset...\n");

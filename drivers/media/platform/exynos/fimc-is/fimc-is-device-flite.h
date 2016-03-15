@@ -12,7 +12,6 @@
 #ifndef FIMC_IS_DEVICE_FLITE_H
 #define FIMC_IS_DEVICE_FLITE_H
 
-#include <linux/interrupt.h>
 #include "fimc-is-type.h"
 
 #define EXPECT_FRAME_START	0
@@ -42,8 +41,6 @@ enum fimc_is_flite_state {
 	FLITE_B_SLOT_VALID,
 	/* finish state */
 	FLITE_LAST_CAPTURE,
-	/* flite join ischain */
-	FLITE_JOIN_ISCHAIN,
 	/* one the fly output */
 	FLITE_OTF_WITH_3AA,
 };
@@ -79,9 +76,8 @@ struct fimc_is_device_flite {
 
 	u32				overflow_cnt;
 
-	u32				csi; /* which csi channel is connceted */
-	u32				group; /* which 3aa gorup is connected when otf is enable */
-
+	/* which 3aa gorup is connected when otf is enable */
+	u32				group;
 	u32				sw_checker;
 	u32				sw_trigger;
 	atomic_t			bcount;
@@ -101,9 +97,6 @@ struct fimc_is_device_flite {
 	struct workqueue_struct		*early_workqueue;
 	struct delayed_work		early_work_wq;
 	void				(*chk_early_buf_done)(struct fimc_is_device_flite *flite, u32 framerate, u32 position);
-
-	/* pointer address from device sensor */
-	struct v4l2_subdev		**subdev;
 };
 
 int fimc_is_flite_probe(struct fimc_is_device_sensor *device,

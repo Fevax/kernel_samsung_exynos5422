@@ -92,10 +92,6 @@ void hevc_dec_calc_dpb_size(struct hevc_ctx *ctx);
 						& HEVC_DECODED_FRAME_MASK)
 #define hevc_get_dec_used_flag()		readl(dev->regs_base + \
 						HEVC_D_USED_DPB_FLAG_LOWER)
-#define hevc_get_last_disp_info()	((readl(dev->regs_base + 			\
-						HEVC_D_DISPLAY_STATUS)		\
-						>> HEVC_DISPLAY_LAST_INFO_SHIFT)	\
-						& HEVC_DISPLAY_LAST_INFO_MASK)
 
 #define mb_width(x_size)		((x_size + 15) / 16)
 #define mb_height(y_size)		((y_size + 15) / 16)
@@ -116,9 +112,8 @@ void hevc_dec_calc_dpb_size(struct hevc_ctx *ctx);
 #define CROP_INFO_V		HEVC_D_DISPLAY_CROP_INFO2
 
 #define DEC_HEVC_SCRATCH_SIZE(x, y)			\
-			((((x + 15) / 16) + 1) * 64 + \
-			((x + 63) / 64) * 512 + (x + 64) * 10 + y * 128)
-
+			((((x + 15) / 16) + 1) * 64 + ((x + 63) / 64) * 256 + \
+			((y + 63) / 64) * 256 + (x + 64) * 10 + y * 128)
 
 void hevc_try_run(struct hevc_dev *dev);
 

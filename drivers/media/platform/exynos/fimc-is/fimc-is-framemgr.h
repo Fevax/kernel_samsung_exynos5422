@@ -14,9 +14,6 @@
 #ifndef FIMC_IS_FRAME_MGR_H
 #define FIMC_IS_FRAME_MGR_H
 
-#define FIMC_IS_MAX_BUFS            VIDEO_MAX_FRAME
-#define FIMC_IS_MAX_PLANES          VIDEO_MAX_PLANES
-
 #define FRAMEMGR_ID_INVALID	0x000000
 #define FRAMEMGR_ID_SENSOR	0x000100
 #define FRAMEMGR_ID_3AA_GRP	0x000200
@@ -109,6 +106,8 @@ enum fimc_is_frame_output {
 };
 
 enum fimc_is_frame_mem {
+	/* uninitialized memory */
+	FRAME_UNI_MEM,
 	/* initialized memory */
 	FRAME_INI_MEM,
 	/* mapped memory */
@@ -135,11 +134,11 @@ struct fimc_is_frame {
 
 	/* common use */
 	u32			planes;
-	u32			kvaddr_buffer[FIMC_IS_MAX_PLANES];
-	u32			dvaddr_buffer[FIMC_IS_MAX_PLANES];
+	u32			kvaddr_buffer[4];
+	u32			dvaddr_buffer[4];
 
 	/* internal use */
-	unsigned long		memory;
+	enum fimc_is_frame_mem	memory;
 	u32			state;
 	u32			fcount;
 	u32			rcount;
@@ -179,8 +178,7 @@ struct fimc_is_framemgr {
 	u32			id;
 };
 
-int fimc_is_frame_probe(struct fimc_is_framemgr *this, u32 id);
-int fimc_is_frame_open(struct fimc_is_framemgr *this, u32 buffers);
+int fimc_is_frame_open(struct fimc_is_framemgr *this, u32 id, u32 buffers);
 int fimc_is_frame_close(struct fimc_is_framemgr *this);
 void fimc_is_frame_print_all(struct fimc_is_framemgr *this);
 
@@ -232,7 +230,6 @@ int fimc_is_frame_trans_pro_to_fre(struct fimc_is_framemgr *this,
 	struct fimc_is_frame *frame);
 int fimc_is_frame_trans_com_to_fre(struct fimc_is_framemgr *this,
 	struct fimc_is_frame *frame);
-
 int fimc_is_frame_swap_process_head(struct fimc_is_framemgr *this);
 
 #endif

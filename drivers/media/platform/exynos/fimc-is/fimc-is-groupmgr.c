@@ -487,7 +487,7 @@ static void fimc_is_group_cancel(struct fimc_is_group *group,
 		framemgr_x_barrier_irqr(sub_framemgr, 0, flags);
 	}
 }
-#ifdef CONFIG_USE_VENDER_FEATURE
+
 /* Flash Mode Control */
 #ifdef CONFIG_LEDS_LM3560
 extern int lm3560_reg_update_export(u8 reg, u8 mask, u8 data);
@@ -529,10 +529,11 @@ static void fimc_is_group_set_torch(struct fimc_is_group *group,
 		default:
 			break;
 		}
+
+
 	}
 	return;
 }
-#endif
 
 #ifdef DEBUG_AA
 static void fimc_is_group_debug_aa_shot(struct fimc_is_group *group,
@@ -642,7 +643,6 @@ int fimc_is_group_probe(struct fimc_is_groupmgr *groupmgr,
 
 	clear_bit(FIMC_IS_GROUP_REQUEST_FSTOP, &group->state);
 	clear_bit(FIMC_IS_GROUP_FORCE_STOP, &group->state);
-	clear_bit(FIMC_IS_GROUP_SHOT, &group->state);
 	clear_bit(FIMC_IS_GROUP_READY, &group->state);
 	clear_bit(FIMC_IS_GROUP_RUN, &group->state);
 	clear_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state);
@@ -711,7 +711,6 @@ int fimc_is_group_open(struct fimc_is_groupmgr *groupmgr,
 	/* 2. Init Group */
 	clear_bit(FIMC_IS_GROUP_REQUEST_FSTOP, &group->state);
 	clear_bit(FIMC_IS_GROUP_FORCE_STOP, &group->state);
-	clear_bit(FIMC_IS_GROUP_SHOT, &group->state);
 	clear_bit(FIMC_IS_GROUP_READY, &group->state);
 	clear_bit(FIMC_IS_GROUP_RUN, &group->state);
 	clear_bit(FIMC_IS_GROUP_OTF_INPUT, &group->state);
@@ -870,19 +869,6 @@ int fimc_is_group_close(struct fimc_is_groupmgr *groupmgr,
 		merr("group%d already close", group, group->id);
 		ret = -EMFILE;
 		goto p_err;
-	}
-
-	/*
-	 * Maybe there are some waiting smp_shot semaphores when finishing kthread
-	 * in group close. This situation caused waiting kthread_stop to finish it
-	 * We should check if there are smp_shot in waiting list.
-	 */
-	if (test_bit(FIMC_IS_GROUP_INIT, &group->state)) {
-		while (!list_empty(&group->smp_shot.wait_list)) {
-			warn("group%d frame reqs are waiting in semaphore[%d] when closing",
-					group->id, group->smp_shot.count);
-			up(&group->smp_shot);
-		}
 	}
 
 	if ((refcount == 1) &&
@@ -1162,8 +1148,6 @@ int fimc_is_group_process_start(struct fimc_is_groupmgr *groupmgr,
 				fimc_is_sensor_g_framerate(sensor),
 				group->async_shots,
 				shot_resource);
-
-		memset(&group->intent_ctl, 0, sizeof(struct camera2_ctl));
 	}
 
 	sema_init(&group->smp_shot, shot_resource);
@@ -1189,7 +1173,6 @@ int fimc_is_group_process_stop(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_framemgr *framemgr;
 	struct fimc_is_device_ischain *device;
 	struct fimc_is_device_sensor *sensor;
-	u32 group_id;
 
 	BUG_ON(!groupmgr);
 	BUG_ON(!group);
@@ -1229,12 +1212,6 @@ int fimc_is_group_process_stop(struct fimc_is_groupmgr *groupmgr,
 				goto check_completion;
 			}
 
-			if (!test_bit(FIMC_IS_SENSOR_OPEN, &sensor->state)) {
-				warn("sensor is closed, forcely trigger");
-				up(&group->smp_trigger);
-				goto check_completion;
-			}
-
 			if (!test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state)) {
 				warn("front sensor is stopped, forcely trigger");
 				up(&group->smp_trigger);
@@ -1243,6 +1220,12 @@ int fimc_is_group_process_stop(struct fimc_is_groupmgr *groupmgr,
 
 			if (!test_bit(FIMC_IS_SENSOR_BACK_START, &sensor->state)) {
 				warn("back sensor is stopped, forcely trigger");
+				up(&group->smp_trigger);
+				goto check_completion;
+			}
+
+			if (!test_bit(FIMC_IS_SENSOR_OPEN, &sensor->state)) {
+				warn("sensor is closed, forcely trigger");
 				up(&group->smp_trigger);
 				goto check_completion;
 			}
@@ -1281,14 +1264,14 @@ check_completion:
 			ret = -EINVAL;
 		}
 	} else {
+		u32 group_id = group->id;
 		/* if there's only one group of isp, send group id by 3a0 */
-		if ((group->id == GROUP_ID_ISP) &&
+		if ((group_id == GROUP_ID_ISP) &&
 				GET_FIMC_IS_NUM_OF_SUBIP2(device, 3a0) == 0 &&
 				GET_FIMC_IS_NUM_OF_SUBIP2(device, 3a1) == 0)
 			group_id = GROUP_ID(GROUP_ID_3A0);
 		else
 			group_id = GROUP_ID(group->id);
-
 		ret = fimc_is_itf_process_stop(device, group_id);
 		if (ret) {
 			merr("fimc_is_itf_process_stop is fail", group);
@@ -1312,17 +1295,6 @@ check_completion:
 	rcount = atomic_read(&group->rcount);
 	if (rcount) {
 		merr("rcount is not empty(%d)", group, rcount);
-		ret = -EINVAL;
-	}
-
-	retry = 100;
-	while (--retry && test_bit(FIMC_IS_GROUP_SHOT, &group->state)) {
-		mgwarn(" thread stop waiting...", device, group);
-		msleep(10);
-	}
-
-	if (!retry) {
-		mgerr(" waiting(until thread stop) is fail", device, group);
 		ret = -EINVAL;
 	}
 
@@ -1372,7 +1344,7 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 		goto p_err;
 	}
 
-	if (unlikely(!test_bit(FRAME_INI_MEM, &frame->memory))) {
+	if (unlikely(frame->memory == FRAME_UNI_MEM)) {
 		err("frame %d is NOT init", index);
 		ret = EINVAL;
 		goto p_err;
@@ -1448,10 +1420,11 @@ int fimc_is_group_buffer_queue(struct fimc_is_groupmgr *groupmgr,
 
 	framemgr_x_barrier_irqr(framemgr, index, flags);
 
-	if (unlikely(!test_bit(FRAME_MAP_MEM, &frame->memory) &&
-		!test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state))) {
-		fimc_is_itf_map(device, GROUP_ID(group->id), frame->dvaddr_shot, frame->shot_size);
-		set_bit(FRAME_MAP_MEM, &frame->memory);
+	if (unlikely(frame->memory == FRAME_INI_MEM) &&
+		!test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state)) {
+		fimc_is_itf_map(device, GROUP_ID(group->id),
+			frame->dvaddr_shot, frame->shot_size);
+		frame->memory = FRAME_MAP_MEM;
 	}
 
 	fimc_is_group_start_trigger(groupmgr, group, frame);
@@ -1541,7 +1514,6 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 	BUG_ON(group->instance >= FIMC_IS_MAX_NODES);
 	BUG_ON(group->id >= GROUP_ID_MAX);
 
-	set_bit(FIMC_IS_GROUP_SHOT, &group->state);
 	atomic_dec(&group->rcount);
 
 	if (test_bit(FIMC_IS_GROUP_FORCE_STOP, &group->state)) {
@@ -1564,13 +1536,6 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 	}
 	atomic_dec(&group->smp_shot_count);
 	try_sdown = true;
-
-	/* skip left operation, if group is closing */
-	if (!test_bit(FIMC_IS_GROUP_READY, &group->state)) {
-		mwarn("this group%d was already process stoped", group, group->id);
-		ret = -EINVAL;
-		goto p_err;
-	}
 
 	PROGRAM_COUNT(2);
 	ret = down_interruptible(&groupmgr->group_smp_res[group->id]);
@@ -1766,6 +1731,7 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 		fimc_is_gframe_trans_grp_to_grp(group, group_next, gframe);
 		spin_unlock_irq(&gframemgr->frame_slock);
 	} else {
+#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5422)
 		/* single */
 		group->fcount++;
 		spin_lock_irq(&gframemgr->frame_slock);
@@ -1802,22 +1768,26 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 
 		gframe->fcount = ldr_frame->fcount;
 		spin_unlock_irq(&gframemgr->frame_slock);
+#else
+		/* only there's one group in ischain */
+		pr_debug("[GRP%d] only one group X -> O -> X\n",
+			group->id);
+#endif
 	}
 
 #ifdef DEBUG_AA
 	fimc_is_group_debug_aa_shot(group, ldr_frame);
 #endif
-#ifdef CONFIG_USE_VENDER_FEATURE
+
 	/* Flash Mode Control */
 	fimc_is_group_set_torch(group, ldr_frame);
-#endif
 
 #ifdef ENABLE_DVFS
 	mutex_lock(&resourcemgr->dvfs_ctrl.lock);
 	if ((!pm_qos_request_active(&device->user_qos)) &&
 			(sysfs_debug.en_dvfs)) {
 		/* try to find dynamic scenario to apply */
-		scenario_id = fimc_is_dvfs_sel_scenario(FIMC_IS_DYNAMIC_SN, device, ldr_frame);
+		scenario_id = fimc_is_dvfs_sel_scenario(FIMC_IS_DYNAMIC_SN, device);
 
 		if (scenario_id > 0) {
 			struct fimc_is_dvfs_scenario_ctrl *dynamic_ctrl = resourcemgr->dvfs_ctrl.dynamic_ctrl;
@@ -1848,7 +1818,6 @@ int fimc_is_group_start(struct fimc_is_groupmgr *groupmgr,
 		atomic_inc(&group->scount);
 	}
 
-	clear_bit(FIMC_IS_GROUP_SHOT, &group->state);
 	PROGRAM_COUNT(7);
 	return ret;
 
@@ -1860,12 +1829,8 @@ p_err:
 		atomic_inc(&group->smp_shot_count);
 		up(&group->smp_shot);
 	}
-
 	if (try_rdown)
 		up(&groupmgr->group_smp_res[group->id]);
-
-	clear_bit(FIMC_IS_GROUP_SHOT, &group->state);
-	PROGRAM_COUNT(8);
 
 	return ret;
 }

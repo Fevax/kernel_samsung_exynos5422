@@ -180,7 +180,6 @@
 #define S5P_FIMV_DEC_STATUS_DECODING_DISPLAY		1
 #define S5P_FIMV_DEC_STATUS_DISPLAY_ONLY		2
 #define S5P_FIMV_DEC_STATUS_DECODING_EMPTY		3
-#define S5P_FIMV_DEC_STATUS_LAST_DISP			4	/* Hooking value */
 #define S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK	7
 #define S5P_FIMV_DEC_STATUS_PROGRESSIVE			(0<<3)
 #define S5P_FIMV_DEC_STATUS_INTERLACE			(1<<3)
@@ -398,9 +397,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_MFC_VERSION			0
 #define S5P_FIMV_ERR_FRAME_CONCEAL		-1
 #define S5P_FIMV_R2H_CMD_DPB_FLUSH_RET		-2
-
-/* for compatibility */
-#define S5P_FIMV_E_GOP_CONFIG2			-1
 
 /* Error handling defines */
 #define S5P_FIMV_ERR_WARNINGS_START		145

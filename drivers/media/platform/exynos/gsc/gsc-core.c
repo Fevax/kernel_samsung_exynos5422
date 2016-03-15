@@ -325,6 +325,69 @@ u32 get_plane_size(struct gsc_frame *frame, unsigned int plane)
 	return frame->payload[plane];
 }
 
+u32 get_plane_info(struct gsc_frame frm, u32 addr, u32 *index)
+{
+	if (frm.addr.y == addr) {
+		*index = 0;
+		return frm.addr.y;
+	} else if (frm.addr.cb == addr) {
+		*index = 1;
+		return frm.addr.cb;
+	} else if (frm.addr.cr == addr) {
+		*index = 2;
+		return frm.addr.cr;
+	} else {
+		gsc_err("Plane address is wrong");
+		return -EINVAL;
+	}
+}
+
+void gsc_set_prefbuf(struct gsc_dev *gsc, struct gsc_frame frm)
+{
+	u32 f_chk_addr, f_chk_len, s_chk_addr, s_chk_len;
+	f_chk_addr = f_chk_len = s_chk_addr = s_chk_len = 0;
+
+	f_chk_addr = frm.addr.y;
+	f_chk_len = frm.payload[0];
+	if (frm.fmt->num_planes == 2) {
+		s_chk_addr = frm.addr.cb;
+		s_chk_len = frm.payload[1];
+	} else if (frm.fmt->num_planes == 3) {
+		u32 low_addr, low_plane, mid_addr, mid_plane, high_addr, high_plane;
+		u32 t_min, t_max;
+
+		t_min = min3(frm.addr.y, frm.addr.cb, frm.addr.cr);
+		low_addr = get_plane_info(frm, t_min, &low_plane);
+		t_max = max3(frm.addr.y, frm.addr.cb, frm.addr.cr);
+		high_addr = get_plane_info(frm, t_max, &high_plane);
+
+		mid_plane = 3 - (low_plane + high_plane);
+		if (mid_plane == 0)
+			mid_addr = frm.addr.y;
+		else if (mid_plane == 1)
+			mid_addr = frm.addr.cb;
+		else if (mid_plane == 2)
+			mid_addr = frm.addr.cr;
+		else
+			return;
+
+		f_chk_addr = low_addr;
+		if (mid_addr + frm.payload[mid_plane] - low_addr >
+		    high_addr + frm.payload[high_plane] - mid_addr) {
+			f_chk_len = frm.payload[low_plane];
+			s_chk_addr = mid_addr;
+			s_chk_len = high_addr + frm.payload[high_plane] - mid_addr;
+		} else {
+			f_chk_len = mid_addr + frm.payload[mid_plane] - low_addr;
+			s_chk_addr = high_addr;
+			s_chk_len = frm.payload[high_plane];
+		}
+	}
+
+	gsc_dbg("f_addr = 0x%08x, f_len = %d, s_addr = 0x%08x, s_len = %d\n",
+		f_chk_addr, f_chk_len, s_chk_addr, s_chk_len);
+}
+
 int gsc_try_fmt_mplane(struct gsc_ctx *ctx, struct v4l2_format *f)
 {
 	struct gsc_dev *gsc = ctx->gsc_dev;
@@ -523,24 +586,26 @@ int gsc_try_crop(struct gsc_ctx *ctx, struct v4l2_crop *cr)
 		if (is_rotation) {
 			max_w = min(f->f_width, (u32)var->pix_max->target_w);
 			max_h = min(f->f_height, (u32)var->pix_max->target_h);
-			if (is_rgb32(f->fmt->pixelformat)) {
+			if (is_rgb(f->fmt->pixelformat)) {
 				min_w = min_h = var->pix_min->real_w / 2;
-				offset_w = offset_h = 1;
+				offset_w = offset_h = 2;
 			} else {
 				min_w = min_h = var->pix_min->real_w;
-				offset_w = offset_h = 2;
+				offset_w = offset_h = 4;
 			}
 		} else {
 			max_w = min(f->f_width, (u32)var->pix_max->real_w);
 			max_h = min(f->f_height, (u32)var->pix_max->real_h);
-			if (is_rgb32(f->fmt->pixelformat)) {
+			if (is_rgb(f->fmt->pixelformat)) {
 				min_w = var->pix_min->real_w / 2;
 				min_h = var->pix_min->real_h / 2;
-				offset_w = offset_h = 1;
+				offset_w = 2;
+				offset_h = 1;
 			} else {
 				min_w = var->pix_min->real_w;
 				min_h = var->pix_min->real_h;
-				offset_w = offset_h = 2;
+				offset_w = 4;
+				offset_h = 1;
 			}
 		}
 	} else {
@@ -596,7 +661,7 @@ int gsc_check_rotation_size(struct gsc_ctx *ctx)
 	struct gsc_dev *gsc = ctx->gsc_dev;
 	struct gsc_variant *var = gsc->variant;
 	struct exynos_platform_gscaler *pdata = gsc->pdata;
-	if (!gsc_cap_opened(gsc) && use_input_rotator) {
+	if (use_input_rotator) {
 		struct gsc_frame *s_frame = &ctx->s_frame;
 		if ((s_frame->crop.width > (u32)var->pix_max->rot_w) ||
 		(s_frame->crop.height > (u32)var->pix_max->rot_h)) {
@@ -653,10 +718,7 @@ int gsc_set_scaler_info(struct gsc_ctx *ctx)
 		d_frame->crop.height, ctx->gsc_ctrls.rotate->val,
 		ctx->out_path);
 	if (ret) {
-		gsc_err("out of scaler range : src w : %d, h : %d,\
-			dest w : %d, h : %d", s_frame->crop.width,
-			s_frame->crop.height, d_frame->crop.width,
-			d_frame->crop.height);
+		gsc_err("out of scaler range");
 		return ret;
 	}
 
@@ -1166,42 +1228,49 @@ int gsc_prepare_addr(struct gsc_ctx *ctx, struct vb2_buffer *vb,
 	return ret;
 }
 
+void gsc_cap_irq_handler(struct gsc_dev *gsc)
+{
+	int done_index;
+
+	done_index = gsc_hw_get_done_output_buf_index(gsc);
+	gsc_dbg("done_index : %d", done_index);
+	if (done_index < 0) {
+		gsc_err("All buffers are masked\n");
+		return;
+	}
+	test_bit(ST_CAPT_RUN, &gsc->state) ? :
+		set_bit(ST_CAPT_RUN, &gsc->state);
+	vb2_buffer_done(gsc->cap.vbq.bufs[done_index], VB2_BUF_STATE_DONE);
+}
+
 static irqreturn_t gsc_irq_handler(int irq, void *priv)
 {
 	struct gsc_dev *gsc = priv;
 	int gsc_irq;
 
-	spin_lock(&gsc->slock);
-
-	if (test_bit(ST_PWR_ON, &gsc->state)) {
-		gsc_irq = gsc_hw_get_irq_status(gsc);
-		gsc_hw_clear_irq(gsc, gsc_irq);
-	} else {
-		goto isr_unlock;
-	}
-
-	if (!test_bit(ST_M2M_RUN, &gsc->state) &&
-		!test_bit(ST_OUTPUT_STREAMON, &gsc->state) &&
-		!test_bit(ST_CAPT_RUN, &gsc->state))
-		goto isr_unlock;
 #ifdef GSC_PERF
 	gsc->end_time = sched_clock();
 	gsc_dbg("OPERATION-TIME: %llu\n", gsc->end_time - gsc->start_time);
 #endif
+	gsc_irq = gsc_hw_get_irq_status(gsc);
+	gsc_hw_clear_irq(gsc, gsc_irq);
+
 	if (!(gsc_irq & GSC_IRQ_STATUS_FRM_DONE)) {
 		gsc_err("Error interrupt(0x%x) occured", gsc_irq);
-		gsc_dump_registers(gsc);
 		exynos_sysmmu_show_status(&gsc->pdev->dev);
 		gsc_hw_set_sw_reset(gsc);
-		goto isr_unlock;
+		return IRQ_HANDLED;
 	}
+
+	spin_lock(&gsc->slock);
 
 	if (test_and_clear_bit(ST_M2M_RUN, &gsc->state)) {
 		struct vb2_buffer *src_vb, *dst_vb;
 		struct gsc_ctx *ctx =
 			v4l2_m2m_get_curr_priv(gsc->m2m.m2m_dev);
 
-		del_timer(&gsc->op_timer);
+		if (timer_pending(&gsc->op_timer))
+			del_timer(&gsc->op_timer);
 
 		if (!ctx || !ctx->m2m_ctx) {
 			gsc_err("ctx : 0x%p", ctx);
@@ -1213,6 +1282,12 @@ static irqreturn_t gsc_irq_handler(int irq, void *priv)
 		if (src_vb && dst_vb) {
 			v4l2_m2m_buf_done(src_vb, VB2_BUF_STATE_DONE);
 			v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_DONE);
+
+			if (test_and_clear_bit(ST_STOP_REQ, &gsc->state))
+				wake_up(&gsc->irq_queue);
+			else
+				v4l2_m2m_job_finish(gsc->m2m.m2m_dev, ctx->m2m_ctx);
+
 			/* wake_up job_abort, stop_streaming */
 			spin_lock(&ctx->slock);
 			if (ctx->state & GSC_CTX_STOP_REQ) {
@@ -1220,11 +1295,6 @@ static irqreturn_t gsc_irq_handler(int irq, void *priv)
 				wake_up(&gsc->irq_queue);
 			}
 			spin_unlock(&ctx->slock);
-
-			if (test_and_clear_bit(ST_STOP_REQ, &gsc->state))
-				wake_up(&gsc->irq_queue);
-			else
-				v4l2_m2m_job_finish(gsc->m2m.m2m_dev, ctx->m2m_ctx);
 		}
 		pm_runtime_put(&gsc->pdev->dev);
 	} else if (test_bit(ST_OUTPUT_STREAMON, &gsc->state) &&
@@ -1233,23 +1303,17 @@ static irqreturn_t gsc_irq_handler(int irq, void *priv)
 		    !list_is_singular(&gsc->out.active_buf_q)) {
 			struct gsc_input_buf *done_buf;
 			done_buf = active_queue_pop(&gsc->out, gsc);
-			vb2_buffer_done(&done_buf->vb, VB2_BUF_STATE_DONE);
-			list_del(&done_buf->list);
+			if (done_buf->idx != gsc_hw_get_curr_in_buf_idx(gsc)) {
+				spin_lock(&gsc->mdev[MDEV_OUTPUT]->slock);
+				gsc_hw_set_input_buf_masking(gsc, done_buf->idx, true);
+				gsc_out_set_pp_pending_bit(gsc, done_buf->idx, true);
+				spin_unlock(&gsc->mdev[MDEV_OUTPUT]->slock);
+				vb2_buffer_done(&done_buf->vb, VB2_BUF_STATE_DONE);
+				list_del(&done_buf->list);
+			}
 		}
-		gsc->isr_cnt++;
-	} else if (test_and_clear_bit(ST_CAPT_RUN, &gsc->state)) {
-		if (!list_empty(&gsc->cap.active_buf_q)) {
-			struct gsc_input_buf *done_buf;
-			done_buf =
-			list_entry(gsc->cap.active_buf_q.next,
-				struct gsc_input_buf, list);
-			vb2_buffer_done(&done_buf->vb,
-					VB2_BUF_STATE_DONE);
-			list_del(&done_buf->list);
-		} else {
-			gsc_err("Empty q buf");
-		}
-		wake_up(&gsc->irq_queue);
+	} else if (test_bit(ST_CAPT_PEND, &gsc->state)) {
+		gsc_cap_irq_handler(gsc);
 	}
 
 isr_unlock:
@@ -1384,18 +1448,8 @@ void gsc_dump_registers(struct gsc_dev *gsc)
 {
 	pr_err("GSC dumping registers\n");
 	print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 32, 4, gsc->regs,
-			0x0C20, false);
+			0x0280, false);
 	pr_err("End of GSC_SFR DUMP\n");
-	if (gsc_cap_opened(gsc)) {
-		pr_err("SysRegister dump\n");
-		pr_err("DSD_CFG: 0x%x\n",
-			readl(gsc->sysreg_disp + DSD_CFG));
-		pr_err("GSCL_CFG0: 0x%x\n",
-			readl(gsc->sysreg_gscl + GSCLBLK_CFG0));
-		pr_err("GSCL_CFG1: 0x%x\n",
-			readl(gsc->sysreg_gscl + GSCLBLK_CFG1));
-		pr_err("End of SysRegister dump\n");
-	}
 }
 
 static int gsc_runtime_suspend(struct device *dev)
@@ -1437,7 +1491,7 @@ static int gsc_runtime_resume(struct device *dev)
 	return 0;
 }
 
-static void __maybe_unused gsc_pm_runtime_enable(struct device *dev)
+static void gsc_pm_runtime_enable(struct device *dev)
 {
 #ifdef CONFIG_PM_RUNTIME
 	pm_runtime_enable(dev);
@@ -1465,13 +1519,6 @@ static void gsc_parse_dt(struct device_node *np, struct gsc_dev *gsc)
 	of_property_read_u32(np, "ip_ver", &pdata->ip_ver);
 	of_property_read_u32(np, "mif_min", &pdata->mif_min);
 	of_property_read_u32(np, "int_min", &pdata->int_min);
-
-	if (gsc->id == 0) {
-		of_property_read_u32(np, "int_min_otf",
-				&pdata->int_min_otf);
-		of_property_read_u32(np, "mif_min_otf_rot",
-				&pdata->mif_min_otf_rot);
-	}
 }
 #else
 static void gsc_parse_dt(struct device_node *np, struct gsc_dev *gsc)
@@ -1517,7 +1564,7 @@ struct gsc_variant gsc_variant = {
 	.pix_max		= &gsc_v_max,
 	.pix_min		= &gsc_v_min,
 	.pix_align		= &gsc_v_align,
-	.in_buf_cnt		= 10,
+	.in_buf_cnt		= 4,
 	.out_buf_cnt		= 16,
 	.sc_up_max		= 8,
 	.sc_down_max		= 16,
@@ -1683,24 +1730,18 @@ static int gsc_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_m2m;
 
-	if (is_ver_5hp && (gsc->id == WB_GSC_ID)) {
-		ret = gsc_register_capture_device(gsc);
-		if (ret)
-			goto err_out;
-	}
-
 	snprintf(workqueue_name, WORKQUEUE_NAME_SIZE,
 			"gsc%d_irq_wq_name", gsc->id);
 	gsc->irq_workqueue = create_singlethread_workqueue(workqueue_name);
 	if (gsc->irq_workqueue == NULL) {
 		dev_err(&pdev->dev, "failed to create workqueue for gsc\n");
-		goto err_capture;
+		goto err_out;
 	}
 
 	gsc->alloc_ctx = gsc->vb2->init(gsc);
 	if (IS_ERR(gsc->alloc_ctx)) {
 		ret = PTR_ERR(gsc->alloc_ctx);
-		goto err_capture;
+		goto err_m2m;
 	}
 
 	exynos_create_iovmm(&pdev->dev, 3, 3);
@@ -1708,18 +1749,11 @@ static int gsc_probe(struct platform_device *pdev)
 
 	gsc_hw_set_dynamic_clock_gating(gsc);
 
-#ifdef CONFIG_PM_RUNTIME
 	gsc_pm_runtime_enable(&pdev->dev);
-#else
-	gsc_clock_gating(gsc, GSC_CLK_ON);
-#endif
 
 	gsc_info("gsc-%d registered successfully", gsc->id);
 
 	return 0;
-
-err_capture:
-	gsc_unregister_capture_device(gsc);
 err_out:
 	gsc_unregister_output_device(gsc);
 err_m2m:

@@ -23,9 +23,6 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/platform_device.h>
-#ifdef CONFIG_OF
-#include <linux/of_gpio.h>
-#endif
 #include <mach/regs-gpio.h>
 #include <mach/regs-clock.h>
 #include <plat/clock.h>
@@ -38,7 +35,6 @@
 #include "../fimc-is-core.h"
 #include "../fimc-is-device-sensor.h"
 #include "../fimc-is-resourcemgr.h"
-#include "../fimc-is-hw.h"
 #include "fimc-is-device-6b2.h"
 
 #define SENSOR_NAME "S5K6B2"
@@ -132,85 +128,85 @@ static int sensor_6b2_init(struct v4l2_subdev *subdev, u32 val)
 	pr_info("%s\n", __func__);
 	/* sensor init */
 	/* 8 bit mode */
-	fimc_is_sensor_write8(client, 0x7203, 0x40);
-	fimc_is_sensor_write8(client, 0x602B, 0x02);
-	fimc_is_sensor_write8(client, 0x702A, 0x3D);
-	fimc_is_sensor_write8(client, 0x702B, 0xB0);
-	fimc_is_sensor_write8(client, 0x7030, 0x0E);
-	fimc_is_sensor_write8(client, 0x7031, 0x2F);
+	fimc_is_sensor_write(client, 0x7203, 0x40);
+	fimc_is_sensor_write(client, 0x602B, 0x02);
+	fimc_is_sensor_write(client, 0x702A, 0x3D);
+	fimc_is_sensor_write(client, 0x702B, 0xB0);
+	fimc_is_sensor_write(client, 0x7030, 0x0E);
+	fimc_is_sensor_write(client, 0x7031, 0x2F);
 
 	/* Analog Tuning */
-	fimc_is_sensor_write8(client, 0x7067, 0x00);
-	fimc_is_sensor_write8(client, 0x7073, 0xFF);
-	fimc_is_sensor_write8(client, 0x7074, 0x22);
+	fimc_is_sensor_write(client, 0x7067, 0x00);
+	fimc_is_sensor_write(client, 0x7073, 0xFF);
+	fimc_is_sensor_write(client, 0x7074, 0x22);
 
 	/* Dark Tuning */
-	fimc_is_sensor_write8(client, 0x7042, 0x1F);
-	fimc_is_sensor_write8(client, 0x7403, 0xC0);
-	fimc_is_sensor_write8(client, 0x7245, 0x04);
-	fimc_is_sensor_write8(client, 0x7205, 0xA1);
+	fimc_is_sensor_write(client, 0x7042, 0x1F);
+	fimc_is_sensor_write(client, 0x7403, 0xC0);
+	fimc_is_sensor_write(client, 0x7245, 0x04);
+	fimc_is_sensor_write(client, 0x7205, 0xA1);
 
 	/* Remove Dark Band */
-	fimc_is_sensor_write8(client, 0x7430, 0x07);
-	fimc_is_sensor_write8(client, 0x705C, 0x7E);
+	fimc_is_sensor_write(client, 0x7430, 0x07);
+	fimc_is_sensor_write(client, 0x705C, 0x7E);
 
 	/* Remove  Sun spot */
-	fimc_is_sensor_write8(client, 0x702C, 0x3C);
-	fimc_is_sensor_write8(client, 0x7075, 0x3D);
+	fimc_is_sensor_write(client, 0x702C, 0x3C);
+	fimc_is_sensor_write(client, 0x7075, 0x3D);
 
 	/* Remove CFPN */
-	fimc_is_sensor_write8(client, 0x7066, 0x0C);
+	fimc_is_sensor_write(client, 0x7066, 0x0C);
 
 	/* AE setting */
-	fimc_is_sensor_write8(client, 0x6000, 0x44);
-	fimc_is_sensor_write8(client, 0x6001, 0x44);
-	fimc_is_sensor_write8(client, 0x6002, 0x44);
-	fimc_is_sensor_write8(client, 0x6003, 0x44);
-	fimc_is_sensor_write8(client, 0x6004, 0x44);
-	fimc_is_sensor_write8(client, 0x6005, 0x44);
-	fimc_is_sensor_write8(client, 0x6006, 0x44);
-	fimc_is_sensor_write8(client, 0x6007, 0x44);
+	fimc_is_sensor_write(client, 0x6000, 0x44);
+	fimc_is_sensor_write(client, 0x6001, 0x44);
+	fimc_is_sensor_write(client, 0x6002, 0x44);
+	fimc_is_sensor_write(client, 0x6003, 0x44);
+	fimc_is_sensor_write(client, 0x6004, 0x44);
+	fimc_is_sensor_write(client, 0x6005, 0x44);
+	fimc_is_sensor_write(client, 0x6006, 0x44);
+	fimc_is_sensor_write(client, 0x6007, 0x44);
 
 	/* AE target */
-	fimc_is_sensor_write8(client, 0x600A, 0xB4);
+	fimc_is_sensor_write(client, 0x600A, 0xB4);
 
 	/* speed */
-	fimc_is_sensor_write8(client, 0x5034, 0x00);
+	fimc_is_sensor_write(client, 0x5034, 0x00);
 
 	/* Cintc_min */
-	fimc_is_sensor_write8(client, 0x5017, 0x01);
+	fimc_is_sensor_write(client, 0x5017, 0x01);
 
 	/* Number of pixel */
-	fimc_is_sensor_write8(client, 0x5030, 0x4A);
-	fimc_is_sensor_write8(client, 0x5031, 0xC0);
+	fimc_is_sensor_write(client, 0x5030, 0x4A);
+	fimc_is_sensor_write(client, 0x5031, 0xC0);
 
 	/* G + R Setting */
 	/* Vision Senser Data = 0.5*Gr + 0.5*R */
-	fimc_is_sensor_write8(client, 0x6029, 0x02);
-	fimc_is_sensor_write8(client, 0x602A, 0x02);
+	fimc_is_sensor_write(client, 0x6029, 0x02);
+	fimc_is_sensor_write(client, 0x602A, 0x02);
 
 	/* For Analog Gain 16x */
-	fimc_is_sensor_write8(client, 0x7018, 0xCF);
-	fimc_is_sensor_write8(client, 0x7019, 0xDB);
-	fimc_is_sensor_write8(client, 0x702A, 0x8D);
-	fimc_is_sensor_write8(client, 0x702B, 0x60);
-	fimc_is_sensor_write8(client, 0x5035, 0x02);
+	fimc_is_sensor_write(client, 0x7018, 0xCF);
+	fimc_is_sensor_write(client, 0x7019, 0xDB);
+	fimc_is_sensor_write(client, 0x702A, 0x8D);
+	fimc_is_sensor_write(client, 0x702B, 0x60);
+	fimc_is_sensor_write(client, 0x5035, 0x02);
 
 	/* BIT_RATE_MBPS_alv */
-	fimc_is_sensor_write8(client, 0x7351, 0x02);
-	fimc_is_sensor_write8(client, 0x7352, 0x48);
-	fimc_is_sensor_write8(client, 0x7353, 0x00);
-	fimc_is_sensor_write8(client, 0x7354, 0x00);
+	fimc_is_sensor_write(client, 0x7351, 0x02);
+	fimc_is_sensor_write(client, 0x7352, 0x48);
+	fimc_is_sensor_write(client, 0x7353, 0x00);
+	fimc_is_sensor_write(client, 0x7354, 0x00);
 
-	fimc_is_sensor_write8(client, 0x7339, 0x03);
+	fimc_is_sensor_write(client, 0x7339, 0x03);
 
 	/* Analog gain */
-	fimc_is_sensor_write8(client, 0x4204, 0x00);
-	fimc_is_sensor_write8(client, 0x4205, 0x32);
+	fimc_is_sensor_write(client, 0x4204, 0x00);
+	fimc_is_sensor_write(client, 0x4205, 0x32);
 
 	/* frame rate - default 10fps*/
-	fimc_is_sensor_write8(client, SENSOR_REG_VIS_DURATION_MSB, 0x00);
-	fimc_is_sensor_write8(client, SENSOR_REG_VIS_DURATION_LSB, 0x6A);
+	fimc_is_sensor_write(client, SENSOR_REG_VIS_DURATION_MSB, 0x00);
+	fimc_is_sensor_write(client, SENSOR_REG_VIS_DURATION_LSB, 0x6A);
 
 	pr_info("[MOD:D:%d] %s(%d)\n", module->id, __func__, val);
 
@@ -301,16 +297,9 @@ p_err:
 	return ret;
 }
 
-static int sensor_6b2_s_format(struct v4l2_subdev *subdev, struct v4l2_mbus_framefmt *fmt)
-{
-	/* TODO */
-	return 0;
-}
-
 static const struct v4l2_subdev_video_ops video_ops = {
 	.s_stream = sensor_6b2_s_stream,
-	.s_parm = sensor_6b2_s_param,
-	.s_mbus_fmt = sensor_6b2_s_format
+	.s_parm = sensor_6b2_s_param
 };
 
 static const struct v4l2_subdev_ops subdev_ops = {
@@ -340,9 +329,9 @@ int sensor_6b2_stream_on(struct v4l2_subdev *subdev)
 		goto p_err;
 	}
 
-	ret = fimc_is_sensor_write8(client, 0x4100, 1);
-	if (ret < 0) {
-		err("fimc_is_sensor_write8 is fail(%d)", ret);
+	ret = fimc_is_sensor_write(client, 0x4100, 1);
+	if (ret) {
+		err("fimc_is_sensor_write is fail(%d)", ret);
 		goto p_err;
 	}
 
@@ -372,9 +361,9 @@ int sensor_6b2_stream_off(struct v4l2_subdev *subdev)
 		goto p_err;
 	}
 
-	ret = fimc_is_sensor_write8(client, 0x4100, 0);
-	if (ret < 0) {
-		err("fimc_is_sensor_write8 is fail(%d)", ret);
+	ret = fimc_is_sensor_write(client, 0x4100, 0);
+	if (ret) {
+		err("fimc_is_sensor_write is fail(%d)", ret);
 		goto p_err;
 	}
 
@@ -420,8 +409,8 @@ int sensor_6b2_s_duration(struct v4l2_subdev *subdev, u64 duration)
 	value[0] = result & 0xFF;
 	value[1] = (result >> 8) & 0xFF;
 
-	fimc_is_sensor_write8(client, SENSOR_REG_VIS_DURATION_MSB, value[1]);
-	fimc_is_sensor_write8(client, SENSOR_REG_VIS_DURATION_LSB, value[0]);
+	fimc_is_sensor_write(client, SENSOR_REG_VIS_DURATION_MSB, value[1]);
+	fimc_is_sensor_write(client, SENSOR_REG_VIS_DURATION_LSB, value[0]);
 
 p_err:
 	return ret;
@@ -466,7 +455,7 @@ int sensor_6b2_s_exposure(struct v4l2_subdev *subdev, u64 exposure)
 
 	value = exposure & 0xFF;
 
-	fimc_is_sensor_write8(client, SENSOR_REG_VIS_AE_TARGET, value);
+	fimc_is_sensor_write(client, SENSOR_REG_VIS_AE_TARGET, value);
 
 p_err:
 	return ret;
@@ -540,138 +529,6 @@ struct fimc_is_sensor_ops module_6b2_ops = {
 	.g_max_dgain	= sensor_6b2_g_max_dgain
 };
 
-#ifdef CONFIG_OF
-static int sensor_6b2_power_setpin(struct device *dev)
-{
-	struct exynos_platform_fimc_is_sensor *pdata;
-	struct device_node *dnode;
-	int gpio_none = 0;
-	int gpio_reset = 0, gpio_standby = 0;
-	int gpios_cam_en = 0;
-	bool cam_1p2v_use = true;
-
-	BUG_ON(!dev);
-	BUG_ON(!dev->platform_data);
-
-	dnode = dev->of_node;
-	pdata = dev->platform_data;
-
-	gpio_reset = of_get_named_gpio(dnode, "gpio_reset", 0);
-	if (!gpio_is_valid(gpio_reset)) {
-		err("failed to get PIN_RESET");
-		return -EINVAL;
-	} else {
-		gpio_request_one(gpio_reset, GPIOF_IN, "CAM_GPIO_INPUT");
-		gpio_free(gpio_reset);
-	}
-
-	gpios_cam_en = of_get_named_gpio(dnode, "gpios_cam_en", 0);
-	if (!gpio_is_valid(gpios_cam_en)) {
-		err("failed to get front cam en gpio");
-	} else {
-		gpio_request_one(gpios_cam_en, GPIOF_IN, "CAM_GPIO_INPUT");
-		gpio_free(gpios_cam_en);
-	}
-
-	gpio_standby = of_get_named_gpio(dnode, "gpio_standby", 0);
-	if (!gpio_is_valid(gpio_standby)) {
-		err("failed to get gpio_standby");
-	} else {
-		gpio_request_one(gpio_standby, GPIOF_IN, "CAM_GPIO_INPUT");
-		gpio_free(gpio_standby);
-	}
-
-	if (of_find_property(dnode, "cam_1.2v_not_used", NULL))
-		cam_1p2v_use = false;
-
-	/* FRONT CAMERA  - POWER ON */
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 0, gpio_standby, 0, NULL, 0, PIN_OUTPUT_LOW);
-	if (gpio_is_valid(gpios_cam_en)) {
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 1, gpios_cam_en, 0, NULL, 0, PIN_OUTPUT_HIGH);
-	} else {
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 1, gpio_none, 0, "VT_CAM_2.8V", 0, PIN_REGULATOR_ON);
-	}
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 2, gpio_none, 0, "VT_CAM_1.8V", 0, PIN_REGULATOR_ON);
-	if (cam_1p2v_use) {
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 3, gpio_none, 0, "VT_CAM_1.2V", 1000, PIN_REGULATOR_ON);
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 4, gpio_reset, 0, NULL, 0, PIN_OUTPUT_HIGH);
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 5, gpio_none, 0, "ch", 0, PIN_FUNCTION);
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 6, gpio_none, 0, NULL, 0, PIN_END);
-	} else {
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 3, gpio_reset, 0, NULL, 0, PIN_OUTPUT_HIGH);
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 4, gpio_none, 0, "ch", 0, PIN_FUNCTION);
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_ON, 5, gpio_none, 0, NULL, 0, PIN_END);
-	}
-
-	/* FRONT CAMERA  - POWER OFF */
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 0, gpio_standby, 0, NULL, 0, PIN_OUTPUT_LOW);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 1, gpio_none, 0, "off", 0, PIN_FUNCTION);
-	SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 2, gpio_reset, 0, NULL, 0, PIN_OUTPUT_LOW);
-	if (cam_1p2v_use) {
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 3, gpio_none, 0, "VT_CAM_1.2V", 0, PIN_REGULATOR_OFF);
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 4, gpio_none, 0, "VT_CAM_1.8V", 0, PIN_REGULATOR_OFF);
-		if (gpio_is_valid(gpios_cam_en)) {
-			SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 5, gpios_cam_en, 0, NULL, 0, PIN_OUTPUT_LOW);
-		} else {
-			SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 5, gpio_none, 0, "VT_CAM_2.8V", 0, PIN_REGULATOR_OFF);
-		}
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 6, gpio_none, 0, NULL, 0, PIN_END);
-	} else {
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 3, gpio_none, 0, "VT_CAM_1.8V", 0, PIN_REGULATOR_OFF);
-		if (gpio_is_valid(gpios_cam_en)) {
-			SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 4, gpios_cam_en, 0, NULL, 0, PIN_OUTPUT_LOW);
-		} else {
-			SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 4, gpio_none, 0, "VT_CAM_2.8V", 0, PIN_REGULATOR_OFF);
-		}
-		SET_PIN(pdata, SENSOR_SCENARIO_NORMAL, GPIO_SCENARIO_OFF, 5, gpio_none, 0, NULL, 0, PIN_END);
-	}
-
-	/* VISION CAMERA  - POWER ON */
-	SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 0, gpio_reset, 0, NULL, 0, PIN_OUTPUT_LOW);
-	if (gpio_is_valid(gpios_cam_en)) {
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 1, gpios_cam_en, 0, NULL, 0, PIN_OUTPUT_HIGH);
-	} else {
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 1, gpio_none, 0, "VT_CAM_2.8V", 0, PIN_REGULATOR_ON);
-	}
-	SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 2, gpio_none, 0, "VT_CAM_1.8V", 0, PIN_REGULATOR_ON);
-	if (cam_1p2v_use) {
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 3, gpio_none, 0, "VT_CAM_1.2V", 1000, PIN_REGULATOR_ON);
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 4, gpio_standby, 0, NULL, 0, PIN_OUTPUT_HIGH);
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 5, gpio_none, 0, "ch", 0, PIN_FUNCTION);
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 6, gpio_none, 0, NULL, 0, PIN_END);
-	} else {
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 3, gpio_standby, 0, NULL, 0, PIN_OUTPUT_HIGH);
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 4, gpio_none, 0, "ch", 0, PIN_FUNCTION);
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_ON, 5, gpio_none, 0, NULL, 0, PIN_END);
-	}
-
-	/* VISION CAMERA  - POWER OFF */
-	SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 0, gpio_reset, 0, NULL, 0, PIN_OUTPUT_LOW);
-	SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 1, gpio_none, 0, "off", 0, PIN_FUNCTION);
-	SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 2, gpio_standby, 0, NULL, 0, PIN_OUTPUT_LOW);
-	if (cam_1p2v_use) {
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 3, gpio_none, 0, "VT_CAM_1.2V", 0, PIN_REGULATOR_OFF);
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 4, gpio_none, 0, "VT_CAM_1.8V", 0, PIN_REGULATOR_OFF);
-		if (gpio_is_valid(gpios_cam_en)) {
-			SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 5, gpios_cam_en, 0, NULL, 0, PIN_OUTPUT_LOW);
-		} else {
-			SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 5, gpio_none, 0, "VT_CAM_2.8V", 0, PIN_REGULATOR_OFF);
-		}
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 6, gpio_none, 0, NULL, 0, PIN_END);
-	} else {
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 3, gpio_none, 0, "VT_CAM_1.8V", 0, PIN_REGULATOR_OFF);
-		if (gpio_is_valid(gpios_cam_en)) {
-			SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 4, gpios_cam_en, 0, NULL, 0, PIN_OUTPUT_LOW);
-		} else {
-			SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 4, gpio_none, 0, "VT_CAM_2.8V", 0, PIN_REGULATOR_OFF);
-		}
-		SET_PIN(pdata, SENSOR_SCENARIO_VISION, GPIO_SCENARIO_OFF, 5, gpio_none, 0, NULL, 0, PIN_END);
-	}
-
-	return 0;
-}
-#endif
-
 int sensor_6b2_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
 {
@@ -681,10 +538,8 @@ int sensor_6b2_probe(struct i2c_client *client,
 	struct fimc_is_module_enum *module;
 	struct fimc_is_device_sensor *device;
 	struct sensor_open_extended *ext;
-	static bool probe_retried = false;
 
-	if (!fimc_is_dev)
-		goto probe_defer;
+	BUG_ON(!fimc_is_dev);
 
 	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
 	if (!core) {
@@ -715,10 +570,6 @@ int sensor_6b2_probe(struct i2c_client *client,
 	module->pixel_height = module->active_height + 10;
 	module->max_framerate = 30;
 	module->position = SENSOR_POSITION_FRONT;
-	module->mode = CSI_MODE_CH0_ONLY;
-	module->lanes = CSI_DATA_LANES_1;
-	module->sensor_maker = "SLSI";
-	module->sensor_name = "S5K6B2";
 	module->setfile_name = "setfile_6b2.bin";
 	module->cfgs = ARRAY_SIZE(config_6b2);
 	module->cfg = config_6b2;
@@ -726,14 +577,11 @@ int sensor_6b2_probe(struct i2c_client *client,
 	if (!module->private_data) {
 		err("private_data is NULL");
 		ret = -ENOMEM;
-		kfree(subdev_module);
 		goto p_err;
 	}
-#ifdef CONFIG_OF
-	module->power_setpin = sensor_6b2_power_setpin;
-#endif
+
 	ext = &module->ext;
-	ext->mipi_lane_num = module->lanes;
+	ext->mipi_lane_num = 1;
 	ext->I2CSclk = I2C_L0;
 	ext->sensor_con.product_name = SENSOR_NAME_S5K6B2;
 	ext->sensor_con.peri_type = SE_I2C;
@@ -745,13 +593,12 @@ int sensor_6b2_probe(struct i2c_client *client,
 
 	ext->companion_con.product_name = COMPANION_NAME_NOTHING;
 
-	if (client) {
-		v4l2_i2c_subdev_init(subdev_module, client, &subdev_ops);
-		subdev_module->internal_ops = &internal_ops;
-	} else {
-		v4l2_subdev_init(subdev_module, &subdev_ops);
-	}
-
+#ifdef SENSOR_S5K6B2_DRIVING
+	v4l2_i2c_subdev_init(subdev_module, client, &subdev_ops);
+	subdev_module->internal_ops = &internal_ops;
+#else
+	v4l2_subdev_init(subdev_module, &subdev_ops);
+#endif
 	v4l2_set_subdevdata(subdev_module, module);
 	v4l2_set_subdev_hostdata(subdev_module, device);
 	snprintf(subdev_module->name, V4L2_SUBDEV_NAME_SIZE, "sensor-subdev.%d", module->id);
@@ -759,16 +606,6 @@ int sensor_6b2_probe(struct i2c_client *client,
 p_err:
 	info("%s(%d)\n", __func__, ret);
 	return ret;
-
-probe_defer:
-	if (probe_retried) {
-		err("probe has already been retried!!");
-		BUG();
-	}
-
-	probe_retried = true;
-	err("core device is not yet probed");
-	return -EPROBE_DEFER;
 }
 
 static int sensor_6b2_remove(struct i2c_client *client)

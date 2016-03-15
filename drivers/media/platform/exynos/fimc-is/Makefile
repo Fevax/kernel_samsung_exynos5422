@@ -2,6 +2,9 @@ $(shell mkdir -p $(objtree)/drivers/media/platform/exynos/fimc-is/sensor)
 
 fimc-is-objs	:= fimc-is-core.o \
 		fimc-is-mem.o \
+		fimc-is-spi.o \
+		crc32.o \
+		fimc-is-sec-define.o \
 		fimc-is-framemgr.o \
 		fimc-is-groupmgr.o \
 		fimc-is-resourcemgr.o \
@@ -14,8 +17,6 @@ fimc-is-objs	:= fimc-is-core.o \
 		fimc-is-video-scp.o \
 		fimc-is-video-vdisc.o \
 		fimc-is-video-vdiso.o \
-		fimc-is-hw-csi.o \
-		fimc-is-hw-ischain.o \
 		fimc-is-subdev-ctrl.o \
 		fimc-is-device-csi.o \
 		fimc-is-device-flite.o \
@@ -27,21 +28,9 @@ fimc-is-objs	:= fimc-is-core.o \
 		fimc-is-dt.o \
 		fimc-is-clk-gate.o
 
-obj-$(CONFIG_USE_VENDER_FEATURE) := fimc-is-spi.o \
-				fimc-is-sec-define.o \
-				crc32.o
-
 obj-$(CONFIG_COMPANION_USE)	+= fimc-is-companion.o \
 				fimc-is-fan53555.o \
-				fimc-is-ncp6335b.o \
-				fimc-is-companion-dt.o \
 				fimc-is-device-companion.o \
 				fimc-is-video-companion.o
-
 obj-$(CONFIG_VIDEO_EXYNOS_FIMC_IS) += fimc-is.o
-obj-$(CONFIG_OIS_USE)	+= fimc-is-device-ois.o
-obj-$(CONFIG_AF_HOST_CONTROL)	+= fimc-is-device-af.o
-obj-$(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)	+= fimc-is-device-eeprom.o
-obj-$(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)	+= fimc-is-device-eeprom.o
-
 obj-$(CONFIG_VIDEO_EXYNOS_FIMC_IS) += sensor/

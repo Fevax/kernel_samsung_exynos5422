@@ -24,7 +24,7 @@
 
 void fimg2d_clk_on(struct fimg2d_control *ctrl)
 {
-	if (ip_is_g2d_5ar2() || ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+	if (ip_is_g2d_5ar2() || ip_is_g2d_5h()) {
 		clk_enable(ctrl->clock);
 		clk_enable(ctrl->qe_clock);
 	} else
@@ -35,7 +35,7 @@ void fimg2d_clk_on(struct fimg2d_control *ctrl)
 
 void fimg2d_clk_off(struct fimg2d_control *ctrl)
 {
-	if (ip_is_g2d_5ar2() || ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+	if (ip_is_g2d_5ar2() || ip_is_g2d_5h()) {
 		clk_disable(ctrl->clock);
 		clk_disable(ctrl->qe_clock);
 	} else
@@ -53,16 +53,6 @@ int exynos5430_fimg2d_clk_setup(struct fimg2d_control *ctrl)
 
 	of_property_read_string_index(ctrl->dev->of_node,
 			"clock-names", 0, (const char **)&(pdata->gate_clkname));
-
-	ctrl->clk_osc = devm_clk_get(ctrl->dev, "fin_pll");
-	if (IS_ERR(ctrl->clk_osc)) {
-		if (PTR_ERR(ctrl->clk_osc) == -ENOENT)
-			/* clock is not present */
-			ctrl->clk_osc = NULL;
-		else
-			return PTR_ERR(ctrl->clk_osc);
-		dev_info(ctrl->dev, "'fin_pll' clock is not present\n");
-	}
 
 	ctrl->qe_clock = devm_clk_get(ctrl->dev, "gate_qe_g2d");
 	if (IS_ERR(ctrl->qe_clock)) {
@@ -135,14 +125,6 @@ int exynos5430_fimg2d_clk_set(struct fimg2d_control *ctrl)
 
 	return 0;
 }
-
-int exynos5433_fimg2d_clk_set_osc(struct fimg2d_control *ctrl)
-{
-	clk_set_parent(ctrl->clk_chld1, ctrl->clk_osc);
-	clk_set_parent(ctrl->clk_chld2, ctrl->clk_osc);
-
-	return 0;
-}
 #endif
 
 int fimg2d_clk_setup(struct fimg2d_control *ctrl)
@@ -176,7 +158,7 @@ int fimg2d_clk_setup(struct fimg2d_control *ctrl)
 			goto err_clk2;
 
 		}
-	} else if (ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+	} else if (ip_is_g2d_5h()) {
 #ifdef CONFIG_OF
 		if (exynos5430_fimg2d_clk_setup(ctrl)) {
 			fimg2d_err("failed to setup clk\n");
@@ -203,7 +185,7 @@ int fimg2d_clk_setup(struct fimg2d_control *ctrl)
 		goto err_clk2;
 	}
 
-	if (ip_is_g2d_5ar2() || ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+	if (ip_is_g2d_5ar2() || ip_is_g2d_5h()) {
 		if (clk_prepare(ctrl->clock))
 			fimg2d_err("failed to prepare gate clock\n");
 
@@ -231,14 +213,14 @@ void fimg2d_clk_release(struct fimg2d_control *ctrl)
 {
 	clk_put(ctrl->clock);
 
-	if (ip_is_g2d_5ar2() || ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+	if (ip_is_g2d_5ar2() || ip_is_g2d_5h()) {
 		clk_unprepare(ctrl->clock);
 		clk_unprepare(ctrl->qe_clock);
 	} else
 		clk_unprepare(ctrl->clock);
 
 
-	if (ip_is_g2d_5ar2() || ip_is_g2d_5h() || ip_is_g2d_5hp())
+	if (ip_is_g2d_5ar2() || ip_is_g2d_5h())
 		clk_put(ctrl->qe_clock);
 
 	if (ip_is_g2d_4p()) {

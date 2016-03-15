@@ -38,24 +38,6 @@
 #include "fimg2d_cache.h"
 #include "fimg2d_helper.h"
 
-#define fimg2d_pm_qos_add(ctrl)				\
-do { 							\
-	fimg2d_pm_qos_add_cpu(ctrl);			\
-	fimg2d_pm_qos_add_bus(ctrl);			\
-} while (0)
-
-#define fimg2d_pm_qos_remove(ctrl)			\
-do {							\
-	fimg2d_pm_qos_remove_cpu(ctrl);			\
-	fimg2d_pm_qos_remove_bus(ctrl);			\
-} while (0)
-
-#define fimg2d_pm_qos_update(ctrl, status)		\
-do {							\
-	fimg2d_pm_qos_update_cpu(ctrl, status);		\
-	fimg2d_pm_qos_update_bus(ctrl, status);		\
-} while (0)
-
 #define POLL_TIMEOUT	2	/* 2 msec */
 #define POLL_RETRY	1000
 #define CTX_TIMEOUT	msecs_to_jiffies(10000)	/* 10 sec */
@@ -75,14 +57,12 @@ static struct fimg2d_qos g2d_qos_table[G2D_LV_END];
 void fimg2d_power_control(struct fimg2d_control *ctrl, enum fimg2d_pw_status status)
 {
 	if (status == FIMG2D_PW_ON) {
-		if (ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+		if (ip_is_g2d_5h()) {
 			pm_runtime_get_sync(ctrl->dev);
 			fimg2d_debug("Done pm_runtime_get_sync()\n");
 		}
 	} else if (status == FIMG2D_PW_OFF) {
-		if (ip_is_g2d_5hp())
-			exynos5433_fimg2d_clk_set_osc(ctrl);
-		if (ip_is_g2d_5h() || ip_is_g2d_5hp()){
+		if (ip_is_g2d_5h()){
 			pm_runtime_put_sync(ctrl->dev);
 			fimg2d_debug("Done pm_runtime_put_sync()\n");
 		}
@@ -90,25 +70,80 @@ void fimg2d_power_control(struct fimg2d_control *ctrl, enum fimg2d_pw_status sta
 		fimg2d_debug("status failed : %d\n", status);
 }
 
-#ifdef CONFIG_ARM_EXYNOS_MP_CPUFREQ
-void fimg2d_pm_qos_add_cpu(struct fimg2d_control *ctrl)
+void fimg2d_pm_qos_add(struct fimg2d_control *ctrl)
 {
-	pm_qos_add_request(&ctrl->exynos5_g2d_cpu_qos, PM_QOS_CPU_FREQ_MIN, 0);
-	pm_qos_add_request(&ctrl->exynos5_g2d_kfc_qos, PM_QOS_KFC_FREQ_MIN, 0);
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+	defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ) || \
+	defined(CONFIG_FIMG2D_USE_BUS_DEVFREQ)
+	struct fimg2d_platdata *pdata;
+
+#ifdef CONFIG_OF
+	pdata = ctrl->pdata;
+#else
+	pdata = to_fimg2d_plat(ctrl->dev);
+#endif
+#endif
+
+#if defined CONFIG_ARM_EXYNOS_IKS_CPUFREQ
+	pm_qos_add_request(&ctrl->exynos5_g2d_cpu_qos,
+			PM_QOS_CPU_FREQ_MIN, 0);
+#elif defined CONFIG_ARM_EXYNOS_MP_CPUFREQ
+	pm_qos_add_request(&ctrl->exynos5_g2d_cpu_qos,
+			PM_QOS_CPU_FREQ_MIN, 0);
+	pm_qos_add_request(&ctrl->exynos5_g2d_kfc_qos,
+			PM_QOS_KFC_FREQ_MIN, 0);
+#endif
+
+#ifdef CONFIG_FIMG2D_USE_BUS_DEVFREQ
+	pm_qos_add_request(&ctrl->exynos5_g2d_mif_qos,
+			PM_QOS_BUS_THROUGHPUT, 0);
+	pm_qos_add_request(&ctrl->exynos5_g2d_int_qos,
+			PM_QOS_DEVICE_THROUGHPUT, 0);
+#endif
 }
 
-void fimg2d_pm_qos_remove_cpu(struct fimg2d_control *ctrl)
+void fimg2d_pm_qos_remove(struct fimg2d_control *ctrl)
 {
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+	defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ) || \
+	defined(CONFIG_FIMG2D_USE_BUS_DEVFREQ)
+	struct fimg2d_platdata *pdata;
+
+#ifdef CONFIG_OF
+	pdata = ctrl->pdata;
+#else
+	pdata = to_fimg2d_plat(ctrl->dev);
+#endif
+#endif
+
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+	defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
 	pm_qos_remove_request(&ctrl->exynos5_g2d_cpu_qos);
 	pm_qos_remove_request(&ctrl->exynos5_g2d_kfc_qos);
+#endif
+
+#ifdef CONFIG_FIMG2D_USE_BUS_DEVFREQ
+	pm_qos_remove_request(&ctrl->exynos5_g2d_mif_qos);
+	pm_qos_remove_request(&ctrl->exynos5_g2d_int_qos);
+#endif
 }
 
-void fimg2d_pm_qos_update_cpu(struct fimg2d_control *ctrl,
-				enum fimg2d_qos_status status)
+void fimg2d_pm_qos_update(struct fimg2d_control *ctrl, enum fimg2d_qos_status status)
 {
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+	defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ) || \
+	defined(CONFIG_FIMG2D_USE_BUS_DEVFREQ)
+	struct fimg2d_platdata *pdata;
 	enum fimg2d_qos_level idx;
 	int ret = 0;
 	unsigned long qflags;
+
+#ifdef CONFIG_OF
+	pdata = ctrl->pdata;
+#else
+	pdata = to_fimg2d_plat(ctrl->dev);
+#endif
+#endif
 
 	g2d_spin_lock(&ctrl->qoslock, qflags);
 	if ((ctrl->qos_lv >= G2D_LV0) && (ctrl->qos_lv < G2D_LV_END))
@@ -119,14 +154,21 @@ void fimg2d_pm_qos_update_cpu(struct fimg2d_control *ctrl,
 
 	if (status == FIMG2D_QOS_ON) {
 		if (ctrl->pre_qos_lv != ctrl->qos_lv) {
-			g2d_spin_lock(&ctrl->qoslock, qflags);
-			if (idx == 0 && !ctrl->boost) {
+#ifdef CONFIG_FIMG2D_USE_BUS_DEVFREQ
+			if (idx == 0)
 				ret = set_hmp_boost(true);
-				ctrl->boost = true;
-				fimg2d_debug("turn on hmp booster\n");
-			}
-			g2d_spin_unlock(&ctrl->qoslock, qflags);
 
+			pm_qos_update_request(&ctrl->exynos5_g2d_mif_qos,
+					g2d_qos_table[idx].freq_mif);
+			pm_qos_update_request(&ctrl->exynos5_g2d_int_qos,
+					g2d_qos_table[idx].freq_int);
+			fimg2d_debug("idx:%d, freq_mif:%d, freq_int:%d, ret:%d\n",
+					idx, g2d_qos_table[idx].freq_mif,
+					g2d_qos_table[idx].freq_int, ret);
+
+#endif
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+			defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
 			pm_qos_update_request(&ctrl->exynos5_g2d_cpu_qos,
 					g2d_qos_table[idx].freq_cpu);
 			pm_qos_update_request(&ctrl->exynos5_g2d_kfc_qos,
@@ -135,84 +177,23 @@ void fimg2d_pm_qos_update_cpu(struct fimg2d_control *ctrl,
 					idx, g2d_qos_table[idx].freq_cpu,
 					g2d_qos_table[idx].freq_kfc);
 		}
-	} else if (status == FIMG2D_QOS_OFF) {
-		pm_qos_update_request(&ctrl->exynos5_g2d_cpu_qos, 0);
-		pm_qos_update_request(&ctrl->exynos5_g2d_kfc_qos, 0);
-
-		g2d_spin_lock(&ctrl->qoslock, qflags);
-		if (idx == 0 && ctrl->boost) {
-			ret = set_hmp_boost(false);
-			ctrl->boost = false;
-			fimg2d_debug("turn off hmp booster\n");
-		}
-		g2d_spin_unlock(&ctrl->qoslock, qflags);
-	}
-
-	return;
-err:
-	fimg2d_debug("invalid qos_lv:%d\n", ctrl->qos_lv);
-}
-#else
-void fimg2d_pm_qos_add_cpu(struct fimg2d_control *ctrl) {}
-void fimg2d_pm_qos_remove_cpu(struct fimg2d_control *ctrl) {}
-void fimg2d_pm_qos_update_cpu(struct fimg2d_control *ctrl,
-				enum fimg2d_qos_status status) {}
 #endif
-
-#ifdef CONFIG_PM_DEVFREQ
-void fimg2d_pm_qos_add_bus(struct fimg2d_control *ctrl)
-{
-	pm_qos_add_request(&ctrl->exynos5_g2d_mif_qos,
-				PM_QOS_BUS_THROUGHPUT, 0);
-	pm_qos_add_request(&ctrl->exynos5_g2d_int_qos,
-				PM_QOS_DEVICE_THROUGHPUT, 0);
-}
-
-void fimg2d_pm_qos_remove_bus(struct fimg2d_control *ctrl)
-{
-	pm_qos_remove_request(&ctrl->exynos5_g2d_mif_qos);
-	pm_qos_remove_request(&ctrl->exynos5_g2d_int_qos);
-}
-
-void fimg2d_pm_qos_update_bus(struct fimg2d_control *ctrl,
-				enum fimg2d_qos_status status)
-{
-	enum fimg2d_qos_level idx;
-	int ret = 0;
-	unsigned long qflags;
-
-	g2d_spin_lock(&ctrl->qoslock, qflags);
-	if ((ctrl->qos_lv >= G2D_LV0) && (ctrl->qos_lv < G2D_LV_END))
-		idx = ctrl->qos_lv;
-	else
-		goto err;
-	g2d_spin_unlock(&ctrl->qoslock, qflags);
-
-	if (status == FIMG2D_QOS_ON) {
-		if (ctrl->pre_qos_lv != ctrl->qos_lv) {
-			pm_qos_update_request(&ctrl->exynos5_g2d_mif_qos,
-					g2d_qos_table[idx].freq_mif);
-			pm_qos_update_request(&ctrl->exynos5_g2d_int_qos,
-					g2d_qos_table[idx].freq_int);
-			fimg2d_debug("idx:%d, freq_mif:%d, freq_int:%d, ret:%d\n",
-					idx, g2d_qos_table[idx].freq_mif,
-					g2d_qos_table[idx].freq_int, ret);
-		}
 	} else if (status == FIMG2D_QOS_OFF) {
+#ifdef CONFIG_FIMG2D_USE_BUS_DEVFREQ
 		pm_qos_update_request(&ctrl->exynos5_g2d_mif_qos, 0);
 		pm_qos_update_request(&ctrl->exynos5_g2d_int_qos, 0);
+#endif
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+	defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
+		pm_qos_update_request(&ctrl->exynos5_g2d_cpu_qos, 0);
+		pm_qos_update_request(&ctrl->exynos5_g2d_kfc_qos, 0);
+#endif
+		if (idx == 0)
+			ret = set_hmp_boost(false);
 	}
-
-	return;
 err:
 	fimg2d_debug("invalid qos_lv:%d\n", ctrl->qos_lv);
 }
-#else
-void fimg2d_pm_qos_add_bus(struct fimg2d_control *ctrl) {}
-void fimg2d_pm_qos_remove_bus(struct fimg2d_control *ctrl) {}
-void fimg2d_pm_qos_update_bus(struct fimg2d_control *ctrl,
-				enum fimg2d_qos_status status) {}
-#endif
 
 static int fimg2d_do_bitblt(struct fimg2d_control *ctrl)
 {
@@ -354,8 +335,13 @@ static int fimg2d_open(struct inode *inode, struct file *file)
 		g2d_spin_unlock(&ctrl->qoslock, qflags);
 		fimg2d_pm_qos_update(ctrl, FIMG2D_QOS_ON);
 	} else {
-		fimg2d_debug("count:%ld, fimg2d_pm_pos_update is "
-						"already called\n", count);
+#ifdef CONFIG_FIMG2D_USE_BUS_DEVFREQ
+		fimg2d_debug("count:%ld, fimg2d_pm_qos_update(ON,mif,int) is already called\n", count);
+#endif
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+		defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
+		fimg2d_debug("count:%ld, fimg2d_pm_qos_update(ON,cpu) is already called\n", count);
+#endif
 	}
 	return 0;
 }
@@ -381,8 +367,13 @@ static int fimg2d_release(struct inode *inode, struct file *file)
 	if (!count)
 		fimg2d_pm_qos_update(ctrl, FIMG2D_QOS_OFF);
 	else {
-		fimg2d_debug("count:%ld, fimg2d_pm_pos_update is "
-						"not called yet\n", count);
+#ifdef CONFIG_FIMG2D_USE_BUS_DEVFREQ
+		fimg2d_debug("count:%ld, fimg2d_pm_qos_update(OFF,mif.int) is not called yet\n", count);
+#endif
+#if defined(CONFIG_ARM_EXYNOS_IKS_CPUFREQ) || \
+	defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ)
+		fimg2d_debug("count:%ld, fimg2d_pm_qos_update(OFF, cpu) is not called yet\n", count);
+#endif
 	}
 	kfree(ctx);
 	return 0;
@@ -487,8 +478,7 @@ static long fimg2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 		ret = fimg2d_request_bitblt(ctrl, ctx);
 		if (ret) {
-			fimg2d_err("request bitblit not allowed, "
-					"so passing to s/w fallback.\n");
+			fimg2d_err("request bitblit not allowed.\n");
 			g2d_unlock(&ctrl->drvlock);
 			kfree(usr_dst);
 			mmput(mm);
@@ -581,7 +571,6 @@ static int fimg2d_setup_controller(struct fimg2d_control *ctrl)
 
 	spin_lock_init(&ctrl->bltlock);
 	mutex_init(&ctrl->drvlock);
-	ctrl->boost = false;
 
 	INIT_LIST_HEAD(&ctrl->cmd_q);
 	init_waitqueue_head(&ctrl->wait_q);
@@ -624,30 +613,16 @@ static int parse_g2d_qos_platdata(struct device_node *np, char *node_name,
 
 static void g2d_parse_dt(struct device_node *np, struct fimg2d_platdata *pdata)
 {
-	struct device_node *np_qos;
-
 	if (!np)
 		return;
 
 	of_property_read_u32(np, "ip_ver", &pdata->ip_ver);
 
-	np_qos = of_get_child_by_name(np, "g2d_qos_table");
-	if (!np_qos) {
-		struct device_node *np_pdata =
-				of_find_node_by_name(NULL, "fimg2d_pdata");
-		if (!np_pdata)
-			BUG();
-
-		np_qos = of_get_child_by_name(np_pdata, "g2d_qos_table");
-		if (!np_qos)
-			BUG();
-	}
-
-	parse_g2d_qos_platdata(np_qos, "g2d_qos_variant_0", &g2d_qos_table[0]);
-	parse_g2d_qos_platdata(np_qos, "g2d_qos_variant_1", &g2d_qos_table[1]);
-	parse_g2d_qos_platdata(np_qos, "g2d_qos_variant_2", &g2d_qos_table[2]);
-	parse_g2d_qos_platdata(np_qos, "g2d_qos_variant_3", &g2d_qos_table[3]);
-	parse_g2d_qos_platdata(np_qos, "g2d_qos_variant_4", &g2d_qos_table[4]);
+	parse_g2d_qos_platdata(np, "g2d_qos_variant_0", &g2d_qos_table[0]);
+	parse_g2d_qos_platdata(np, "g2d_qos_variant_1", &g2d_qos_table[1]);
+	parse_g2d_qos_platdata(np, "g2d_qos_variant_2", &g2d_qos_table[2]);
+	parse_g2d_qos_platdata(np, "g2d_qos_variant_3", &g2d_qos_table[3]);
+	parse_g2d_qos_platdata(np, "g2d_qos_variant_4", &g2d_qos_table[4]);
 
 }
 #else
@@ -700,7 +675,6 @@ static int fimg2d_probe(struct platform_device *pdev)
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
 	if (!pdata) {
 		fimg2d_err("failed to allocate memory for controller\n");
-		kfree(ctrl);
 		return -ENOMEM;
 	}
 	ctrl->pdata = pdata;
@@ -814,9 +788,6 @@ drv_free:
 		destroy_workqueue(ctrl->work_q);
 #endif
 	mutex_destroy(&ctrl->drvlock);
-#ifdef CONFIG_OF
-	kfree(pdata);
-#endif
 	kfree(ctrl);
 
 	return ret;
@@ -875,7 +846,6 @@ static int fimg2d_suspend(struct device *dev)
 		mdelay(POLL_TIMEOUT);
 	}
 	g2d_unlock(&ctrl->drvlock);
-	exynos5433_fimg2d_clk_set_osc(ctrl);
 	fimg2d_info("suspend... done\n");
 	return 0;
 }
@@ -883,7 +853,6 @@ static int fimg2d_suspend(struct device *dev)
 static int fimg2d_resume(struct device *dev)
 {
 	unsigned long flags;
-	int ret = 0;
 
 	g2d_lock(&ctrl->drvlock);
 	g2d_spin_lock(&ctrl->bltlock, flags);
@@ -894,22 +863,15 @@ static int fimg2d_resume(struct device *dev)
 	if (ip_is_g2d_5ar2()) {
 		fimg2d_clk_on(ctrl);
 		fimg2d_clk_off(ctrl);
-	} else if (ip_is_g2d_5hp()) {
-		ret = exynos5430_fimg2d_clk_set(ctrl);
-		if (ret) {
-			fimg2d_err("failed to exynos5430_fimg2d_clk_set()\n");
-			return -ENOENT;
-		}
 	}
 	fimg2d_info("resume... done\n");
-	return ret;
+	return 0;
 }
 
 #ifdef CONFIG_PM_RUNTIME
 static int fimg2d_runtime_suspend(struct device *dev)
 {
 	fimg2d_debug("runtime suspend... done\n");
-	exynos5433_fimg2d_clk_set_osc(ctrl);
 	return 0;
 }
 
@@ -923,7 +885,7 @@ static int fimg2d_runtime_resume(struct device *dev)
 			fimg2d_err("failed to fimg2d_clk_set_gate()\n");
 			ret = -ENOENT;
 		}
-	} else if (ip_is_g2d_5h() || ip_is_g2d_5hp()) {
+	} else if (ip_is_g2d_5h()) {
 		ret = exynos5430_fimg2d_clk_set(ctrl);
 		if (ret) {
 			fimg2d_err("failed to exynos5430_fimg2d_clk_set()\n");

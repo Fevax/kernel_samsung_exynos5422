@@ -9,5 +9,4 @@ obj-$(CONFIG_VIDEO_EXYNOS_FIMG2D)	+= fimg2d/
 obj-$(CONFIG_VIDEO_EXYNOS_JPEG)		+= jpeg4/
 obj-$(CONFIG_VIDEO_EXYNOS_HX_JPEG)	+= jpeg_hx/
 obj-$(CONFIG_VIDEO_EXYNOS_TV)		+= tv/
-obj-$(CONFIG_MEDIA_EXYNOS_JPEG)		+= jpeg/
 EXTRA_CLAGS += -Idrivers/media/video

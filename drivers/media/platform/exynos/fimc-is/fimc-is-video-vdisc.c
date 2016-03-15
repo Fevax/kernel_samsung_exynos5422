@@ -72,6 +72,7 @@ int fimc_is_vdc_video_probe(void *data)
 		dev_err(&core->pdev->dev, "%s is fail(%d)\n", __func__, ret);
 
 p_err:
+	info("[VDC:V:X] %s(%d)\n", __func__, ret);
 	return ret;
 }
 
@@ -97,7 +98,7 @@ static int fimc_is_vdc_video_open(struct file *file)
 	info("[VDC:V:%d] %s\n", vctx->instance, __func__);
 
 	refcount = atomic_read(&core->video_isp.refcount);
-	if (refcount > FIMC_IS_MAX_NODES || refcount < 1) {
+	if (refcount > FIMC_IS_MAX_NODES) {
 		err("invalid ischain refcount(%d)", refcount);
 		close_vctx(file, video, vctx);
 		ret = -EINVAL;
@@ -237,7 +238,7 @@ static int fimc_is_vdc_video_set_format_mplane(struct file *file, void *fh,
 {
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
-	struct fimc_is_queue *queue = vctx->q_dst;
+	struct fimc_is_queue *queue = &vctx->q_dst;
 	struct fimc_is_device_ischain *ischain = vctx->device;
 
 	mdbgv_vdc("%s\n", vctx, __func__);
@@ -418,7 +419,7 @@ static int fimc_is_vdc_video_g_ctrl(struct file *file, void *priv,
 {
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
-	struct fimc_is_framemgr *framemgr = &vctx->q_dst->framemgr;
+	struct fimc_is_framemgr *framemgr = &vctx->q_dst.framemgr;
 
 	dbg_vdisc("%s\n", __func__);
 
@@ -623,9 +624,8 @@ p_err:
 
 static void fimc_is_vdc_buffer_queue(struct vb2_buffer *vb)
 {
-	int ret = 0;
 	struct fimc_is_video_ctx *vctx = vb->vb2_queue->drv_priv;
-	struct fimc_is_queue *queue = vctx->q_dst;
+	struct fimc_is_queue *queue = &vctx->q_dst;
 	struct fimc_is_video *video = vctx->video;
 	struct fimc_is_device_ischain *ischain = vctx->device;
 	struct fimc_is_subdev *subdev = &ischain->dis;
@@ -634,17 +634,8 @@ static void fimc_is_vdc_buffer_queue(struct vb2_buffer *vb)
 	dbg_vdisc("%s\n", __func__);
 #endif
 
-	ret = fimc_is_queue_buffer_queue(queue, video->vb2, vb);
-	if (ret) {
-		merr("fimc_is_queue_buffer_queue is fail(%d)", vctx, ret);
-		return;
-	}
-
-	ret = fimc_is_subdev_buffer_queue(subdev, vb->v4l2_buf.index);
-	if (ret) {
-		merr("fimc_is_subdev_buffer_queue is fail(%d)", vctx, ret);
-		return;
-	}
+	fimc_is_queue_buffer_queue(queue, video->vb2, vb);
+	fimc_is_subdev_buffer_queue(subdev, vb->v4l2_buf.index);
 }
 
 static int fimc_is_vdc_buffer_finish(struct vb2_buffer *vb)

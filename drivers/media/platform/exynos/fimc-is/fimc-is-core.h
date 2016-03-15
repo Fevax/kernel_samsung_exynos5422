@@ -143,7 +143,7 @@
 #define I2C_L1_1			(54000000)
 #define I2C_L2				(21600000)
 #define DVFS_SKIP_FRAME_NUM		(5)
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 #define DVFS_L0				(600000)
 #define DVFS_L1				(500000)
 #define DVFS_L1_1			(480000)
@@ -162,7 +162,7 @@
 #define I2C_L1_1			(54000000)
 #define I2C_L2				(21600000)
 #define DVFS_SKIP_FRAME_NUM		(5)
-#elif defined(CONFIG_SOC_EXYNOS3470) || defined(CONFIG_SOC_EXYNOS3472) ||defined(CONFIG_SOC_EXYNOS5260) || defined(CONFIG_SOC_EXYNOS4415)
+#elif defined(CONFIG_SOC_EXYNOS3470) || defined(CONFIG_SOC_EXYNOS5260)
 #define DVFS_L0				(266000)
 #define DVFS_MIF_L0			(400000)
 #define I2C_L0				(108000000)
@@ -170,8 +170,6 @@
 #define I2C_L1_1			(54000000)
 #define I2C_L2				(21600000)
 #endif
-
-#define I2C_RETRY_COUNT         5
 
 #define GET_FIMC_IS_NUM_OF_SUBIP(core, subip) \
 	(core->pdata->subip_info->_ ## subip.valid)
@@ -297,38 +295,18 @@ struct fimc_is_core {
 	struct spi_device			*spi0;
 	struct spi_device			*spi1;
 
-#if defined(CONFIG_COMPANION_USE)
+#if defined(CONFIG_COMPANION_USE) || defined(CONFIG_CAMERA_EEPROM_SUPPORT)
 	struct i2c_client			*client0;
 #endif
-#if defined(CONFIG_OIS_USE)
-	struct i2c_client			*client1;
-#endif
-#ifdef CONFIG_AF_HOST_CONTROL
-	struct i2c_client			*client2;
-#endif
-	struct i2c_client			*eeprom_client0;
-	struct i2c_client			*eeprom_client1;
 
 #ifdef CONFIG_COMPANION_USE
-	struct dcdc_power			companion_dcdc;
+	struct i2c_client			*fan53555_client;
 	struct fimc_is_spi_gpio			spi_gpio;
 	u32					companion_spi_channel;
 	bool					use_two_spi_line;
 #endif
-	u32					use_sensor_dynamic_voltage_mode;
+	u32					use_vision;
 	struct mutex				spi_lock;
-#ifdef CONFIG_OIS_USE
-	bool					use_ois;
-	int					pin_ois_en;
-	bool					ois_ver_read;
-#endif /* CONFIG_OIS_USE */
-	bool					use_ois_hsi2c;
-	bool					use_module_check;
-#ifdef USE_ION_ALLOC
-	struct ion_client    *fimc_ion_client;
-#endif
-	bool					running_rear_camera;
-	bool					running_front_camera;
 };
 
 #if defined(CONFIG_VIDEOBUF2_CMA_PHYS)

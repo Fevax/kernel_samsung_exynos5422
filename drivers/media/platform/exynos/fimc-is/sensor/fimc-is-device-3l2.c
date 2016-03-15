@@ -35,7 +35,6 @@
 #include "../fimc-is-core.h"
 #include "../fimc-is-device-sensor.h"
 #include "../fimc-is-resourcemgr.h"
-#include "../fimc-is-hw.h"
 #include "fimc-is-device-3l2.h"
 
 #define SENSOR_NAME "S5K3L2"
@@ -116,10 +115,6 @@ int sensor_3l2_probe(struct i2c_client *client,
 	module->pixel_height = module->active_height + 10;
 	module->max_framerate = 120;
 	module->position = SENSOR_POSITION_REAR;
-	module->mode = CSI_MODE_CH0_ONLY;
-	module->lanes = CSI_DATA_LANES_4;
-	module->sensor_maker = "SLSI";
-	module->sensor_name = "S5K3L2";
 	module->setfile_name = "setfile_3l2.bin";
 	module->cfgs = ARRAY_SIZE(config_3l2);
 	module->cfg = config_3l2;
@@ -127,7 +122,7 @@ int sensor_3l2_probe(struct i2c_client *client,
 	module->private_data = NULL;
 
 	ext = &module->ext;
-	ext->mipi_lane_num = module->lanes;
+	ext->mipi_lane_num = 4;
 	ext->I2CSclk = I2C_L0;
 
 	ext->sensor_con.product_name = SENSOR_NAME_S5K3L2;
@@ -151,11 +146,11 @@ int sensor_3l2_probe(struct i2c_client *client,
 
 	ext->companion_con.product_name = COMPANION_NAME_NOTHING;
 
-	if (client)
-		v4l2_i2c_subdev_init(subdev_module, client, &subdev_ops);
-	else
-		v4l2_subdev_init(subdev_module, &subdev_ops);
-
+#ifdef DEFAULT_S5K3L2_DRIVING
+	v4l2_i2c_subdev_init(subdev_module, client, &subdev_ops);
+#else
+	v4l2_subdev_init(subdev_module, &subdev_ops);
+#endif
 	v4l2_set_subdevdata(subdev_module, module);
 	v4l2_set_subdev_hostdata(subdev_module, device);
 	snprintf(subdev_module->name, V4L2_SUBDEV_NAME_SIZE, "sensor-subdev.%d", module->id);

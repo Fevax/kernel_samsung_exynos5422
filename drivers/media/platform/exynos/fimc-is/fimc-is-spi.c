@@ -24,18 +24,6 @@
 #define STREAM_TO_U16(var16, p)	{(var16) = ((u16)(*((u8 *)p+1)) + \
 				((u8)(*((u8 *)p) << 8))); }
 
-#ifndef __devinit
-#define __devinit
-#endif
-
-#ifndef __devexit
-#define __devexit
-#endif
-
-#ifndef __devexit_p
-#define __devexit_p(x) x
-#endif
-
 static struct spi_device *g_spi;
 
 int fimc_is_spi_reset(void *buf, u32 rx_addr, size_t size)
@@ -242,7 +230,8 @@ static int __devexit fimc_is_spi_remove(struct spi_device *spi)
 	return 0;
 }
 
-static struct spi_driver fimc_is_spi_driver = {
+static
+struct spi_driver fimc_is_spi_driver = {
 	.driver = {
 		.name = "fimc_is_spi",
 		.bus = &spi_bus_type,
@@ -252,7 +241,8 @@ static struct spi_driver fimc_is_spi_driver = {
 	.remove = __devexit_p(fimc_is_spi_remove),
 };
 
-static int __init fimc_is_spi_init(void)
+static
+int __init fimc_is_spi_init(void)
 {
 	int ret;
 
@@ -264,7 +254,8 @@ static int __init fimc_is_spi_init(void)
 	return ret;
 }
 
-static void __exit fimc_is_spi_exit(void)
+static
+void __exit fimc_is_spi_exit(void)
 {
 	spi_unregister_driver(&fimc_is_spi_driver);
 }

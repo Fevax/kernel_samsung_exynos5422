@@ -72,6 +72,7 @@ int fimc_is_scc_video_probe(void *data)
 		dev_err(&core->pdev->dev, "%s is fail(%d)\n", __func__, ret);
 
 p_err:
+	info("[SCC:V:X] %s(%d)\n", __func__, ret);
 	return ret;
 }
 
@@ -103,7 +104,7 @@ static int fimc_is_scc_video_open(struct file *file)
 	info("[SCC:V:%d] %s\n", vctx->instance, __func__);
 
 	refcount = atomic_read(&core->video_isp.refcount);
-	if (refcount > FIMC_IS_MAX_NODES || refcount < 1) {
+	if (refcount > FIMC_IS_MAX_NODES) {
 		err("invalid ischain refcount(%d)", refcount);
 		close_vctx(file, video, vctx);
 		ret = -EINVAL;
@@ -390,7 +391,7 @@ static int fimc_is_scc_video_streamon(struct file *file, void *priv,
 
 	ret = fimc_is_video_streamon(file, vctx, type);
 	if (ret)
-		merr("fimc_is_video_streamon is fail(%d)", vctx, ret);
+		merr("fimc_is_video_streamoff is fail(%d)", vctx, ret);
 
 	return ret;
 }
@@ -508,10 +509,10 @@ static int fimc_is_scc_video_s_ctrl(struct file *file, void *priv,
 					ctrl->value);
 			ret = -EINVAL;
 		} else {
-			device->color_range &= ~FIMC_IS_SCC_CRANGE_MASK;
+			device->setfile &= ~FIMC_IS_SCC_CRANGE_MASK;
 
 			if (ctrl->value)
-				device->color_range	|=
+				device->setfile	|=
 					(FIMC_IS_CRANGE_LIMITED << FIMC_IS_SCC_CRANGE_SHIFT);
 		}
 		break;
@@ -644,9 +645,8 @@ p_err:
 
 static void fimc_is_scc_buffer_queue(struct vb2_buffer *vb)
 {
-	int ret = 0;
 	struct fimc_is_video_ctx *vctx = vb->vb2_queue->drv_priv;
-	struct fimc_is_queue *queue = vctx->q_dst;
+	struct fimc_is_queue *queue = &vctx->q_dst;
 	struct fimc_is_video *video = vctx->video;
 	struct fimc_is_device_ischain *ischain = vctx->device;
 	struct fimc_is_subdev *scc = &ischain->scc;
@@ -655,17 +655,8 @@ static void fimc_is_scc_buffer_queue(struct vb2_buffer *vb)
 	dbg_scc("%s\n", __func__);
 #endif
 
-	ret = fimc_is_queue_buffer_queue(queue, video->vb2, vb);
-	if (ret) {
-		merr("fimc_is_queue_buffer_queue is fail(%d)", vctx, ret);
-		return;
-	}
-
-	ret = fimc_is_subdev_buffer_queue(scc, vb->v4l2_buf.index);
-	if (ret) {
-		merr("fimc_is_subdev_buffer_queue is fail(%d)", vctx, ret);
-		return;
-	}
+	fimc_is_queue_buffer_queue(queue, video->vb2, vb);
+	fimc_is_subdev_buffer_queue(scc, vb->v4l2_buf.index);
 }
 
 static int fimc_is_scc_buffer_finish(struct vb2_buffer *vb)

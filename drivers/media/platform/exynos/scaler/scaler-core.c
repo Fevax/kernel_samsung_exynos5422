@@ -22,9 +22,6 @@
 #include <linux/exynos_iovmm.h>
 
 #include <media/v4l2-ioctl.h>
-#include <media/m2m1shot.h>
-#include <media/m2m1shot-helper.h>
-
 #include <mach/videonode.h>
 #include <plat/cpu.h>
 
@@ -42,272 +39,223 @@ module_param_named(sc_log_level, sc_log_level, uint, 0644);
 int __measure_hw_latency;
 module_param_named(measure_hw_latency, __measure_hw_latency, int, 0644);
 
-struct vb2_sc_buffer {
-	struct v4l2_m2m_buffer mb;
-	struct sc_ctx *ctx;
-	ktime_t ktime;
-	struct work_struct work;
-};
-
-static const struct sc_fmt sc_formats[] = {
+static struct sc_fmt sc_formats[] = {
 	{
 		.name		= "RGB565",
 		.pixelformat	= V4L2_PIX_FMT_RGB565,
-		.cfg_val	= SCALER_CFG_FMT_RGB565,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 1,
-		.is_rgb		= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_RGB,
 	}, {
 		.name		= "RGB1555",
 		.pixelformat	= V4L2_PIX_FMT_RGB555X,
-		.cfg_val	= SCALER_CFG_FMT_ARGB1555,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 1,
-		.is_rgb		= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_RGB,
 	}, {
 		.name		= "ARGB4444",
 		.pixelformat	= V4L2_PIX_FMT_RGB444,
-		.cfg_val	= SCALER_CFG_FMT_ARGB4444,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 1,
-		.is_rgb		= 1,
-	}, {	/* swaps of ARGB32 in bytes in half word, half words in word */
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_RGB,
+	}, {
 		.name		= "RGBA8888",
 		.pixelformat	= V4L2_PIX_FMT_RGB32,
-		.cfg_val	= SCALER_CFG_FMT_RGBA8888 |
-					SCALER_CFG_BYTE_HWORD_SWAP,
-		.bitperpixel	= { 32 },
 		.num_planes	= 1,
 		.num_comp	= 1,
-		.is_rgb		= 1,
+		.bitperpixel	= { 32 },
+		.color		= SC_COLOR_RGB,
 	}, {
 		.name		= "BGRA8888",
 		.pixelformat	= V4L2_PIX_FMT_BGR32,
-		.cfg_val	= SCALER_CFG_FMT_ARGB8888,
-		.bitperpixel	= { 32 },
 		.num_planes	= 1,
 		.num_comp	= 1,
-		.is_rgb		= 1,
+		.bitperpixel	= { 32 },
+		.color		= SC_COLOR_RGB,
 	}, {
 		.name		= "YUV 4:2:0 contiguous 2-planar, Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV12,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 12 },
 		.num_planes	= 1,
 		.num_comp	= 2,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 12 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:0 contiguous 2-planar, Y/CrCb",
 		.pixelformat	= V4L2_PIX_FMT_NV21,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB420_2P,
-		.bitperpixel	= { 12 },
 		.num_planes	= 1,
 		.num_comp	= 2,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 12 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 2-planar, Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV12M,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P,
-		.bitperpixel	= { 8, 4 },
 		.num_planes	= 2,
 		.num_comp	= 2,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 8, 4 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 2-planar, Y/CrCb",
 		.pixelformat	= V4L2_PIX_FMT_NV21M,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB420_2P,
-		.bitperpixel	= { 8, 4 },
 		.num_planes	= 2,
 		.num_comp	= 2,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 8, 4 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 2-planar, Y/CbCr, tiled",
 		.pixelformat	= V4L2_PIX_FMT_NV12MT_16X16,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_2P |
-					SCALER_CFG_TILE_EN,
-		.bitperpixel	= { 8, 4 },
 		.num_planes	= 2,
 		.num_comp	= 2,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 8, 4 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:0 contiguous 3-planar, Y/Cb/Cr",
 		.pixelformat	= V4L2_PIX_FMT_YUV420,	/* I420 */
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_3P,
-		.bitperpixel	= { 12 },
 		.num_planes	= 1,
 		.num_comp	= 3,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 12 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YVU 4:2:0 contiguous 3-planar, Y/Cr/Cb",
 		.pixelformat	= V4L2_PIX_FMT_YVU420,	/* YV12 */
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_3P,
-		.bitperpixel	= { 12 },
 		.num_planes	= 1,
 		.num_comp	= 3,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 12 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:0 non-contiguous 3-planar, Y/Cb/Cr",
 		.pixelformat	= V4L2_PIX_FMT_YUV420M,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_3P,
-		.bitperpixel	= { 8, 2, 2 },
 		.num_planes	= 3,
 		.num_comp	= 3,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 8, 2, 2 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YVU 4:2:0 non-contiguous 3-planar, Y/Cr/Cb",
 		.pixelformat	= V4L2_PIX_FMT_YVU420M,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR420_3P,
-		.bitperpixel	= { 8, 2, 2 },
 		.num_planes	= 3,
 		.num_comp	= 3,
 		.h_shift	= 1,
 		.v_shift	= 1,
+		.bitperpixel	= { 8, 2, 2 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:2 packed, YCbYCr",
 		.pixelformat	= V4L2_PIX_FMT_YUYV,
-		.cfg_val	= SCALER_CFG_FMT_YUYV,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:2 packed, CbYCrY",
 		.pixelformat	= V4L2_PIX_FMT_UYVY,
-		.cfg_val	= SCALER_CFG_FMT_UYVY,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:2 packed, YCrYCb",
 		.pixelformat	= V4L2_PIX_FMT_YVYU,
-		.cfg_val	= SCALER_CFG_FMT_YVYU,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:2 contiguous 2-planar, Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV16,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR422_2P,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 2,
 		.h_shift	= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:2 contiguous 2-planar, Y/CrCb",
 		.pixelformat	= V4L2_PIX_FMT_NV61,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB422_2P,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 2,
 		.h_shift	= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:2:2 contiguous 3-planar, Y/Cb/Cr",
 		.pixelformat	= V4L2_PIX_FMT_YUV422P,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR422_3P,
-		.bitperpixel	= { 16 },
 		.num_planes	= 1,
 		.num_comp	= 3,
 		.h_shift	= 1,
+		.bitperpixel	= { 16 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:4:4 contiguous Y/CbCr",
 		.pixelformat	= V4L2_PIX_FMT_NV24,
-		.cfg_val	= SCALER_CFG_FMT_YCBCR444_2P,
-		.bitperpixel	= { 24 },
 		.num_planes	= 1,
 		.num_comp	= 2,
+		.bitperpixel	= { 24 },
+		.color		= SC_COLOR_YUV,
 	}, {
 		.name		= "YUV 4:4:4 contiguous Y/CrCb",
 		.pixelformat	= V4L2_PIX_FMT_NV42,
-		.cfg_val	= SCALER_CFG_FMT_YCRCB444_2P,
-		.bitperpixel	= { 24 },
 		.num_planes	= 1,
 		.num_comp	= 2,
+		.bitperpixel	= { 24 },
+		.color		= SC_COLOR_YUV,
 	},
 };
 
 #define SCALE_RATIO(x, y)	((65536 * x) / y)
 
-#define SCALER_VERSION(x, y, z) (((x) << 16) | ((y) << 8) | (z))
-
-/* must specify in revers order of SCALER_VERSION(xyz) */
-static const u32 sc_version_table[][2] = {
-	{ 0x80000064, SCALER_VERSION(3, 0, 0) },
-	{ 0x80000008, SCALER_VERSION(2, 1, 1) },
-	{ 0x80000048, SCALER_VERSION(2, 1, 0) },
-	{ 0x80010000, SCALER_VERSION(2, 0, 1) },
-	{ 0x80000047, SCALER_VERSION(2, 0, 0) },
-};
-
-static const struct sc_variant sc_variant[] = {
-	{
-		.limit_input = {
-			.min_w		= 16,
-			.min_h		= 16,
-			.max_w		= 8192,
-			.max_h		= 8192,
-		},
-		.limit_output = {
-			.min_w		= 4,
-			.min_h		= 4,
-			.max_w		= 4096,
-			.max_h		= 4096,
-		},
-		.version		= SCALER_VERSION(2, 0, 0),
-		.sc_up_max		= SCALE_RATIO(1, 16),
-		.sc_down_min		= SCALE_RATIO(4, 1),
-		.sc_down_swmin		= SCALE_RATIO(16, 1),
-	}, {
-		.limit_input = {
-			.min_w		= 16,
-			.min_h		= 16,
-			.max_w		= 8192,
-			.max_h		= 8192,
-		},
-		.limit_output = {
-			.min_w		= 4,
-			.min_h		= 4,
-			.max_w		= 8192,
-			.max_h		= 8192,
-		},
-		.version		= SCALER_VERSION(2, 0, 1),
-		.sc_up_max		= SCALE_RATIO(1, 16),
-		.sc_down_min		= SCALE_RATIO(4, 1),
-		.sc_down_swmin		= SCALE_RATIO(16, 1),
+static struct sc_variant variant = {
+	.limit_input = {
+		.min_w		= 16,
+		.min_h		= 16,
+		.max_w		= 8192,
+		.max_h		= 8192,
+		.align_w	= 0,
+		.align_h	= 0,
 	},
+	.limit_output = {
+		.min_w		= 4,
+		.min_h		= 4,
+		.max_w		= 8192,
+		.max_h		= 8192,
+		.align_w	= 0,
+		.align_h	= 0,
+	},
+	.sc_up_max		= SCALE_RATIO(1, 16),
+	.sc_down_min		= SCALE_RATIO(4, 1),
+	.sc_down_swmin		= SCALE_RATIO(16, 1),
 };
 
 /* Find the matches format */
-static const struct sc_fmt *sc_find_format(struct sc_dev *sc,
-						u32 pixfmt, bool output_buf)
+static struct sc_fmt *sc_find_format(struct sc_dev *sc, struct v4l2_format *f)
 {
-	const struct sc_fmt *sc_fmt;
+	struct sc_fmt *sc_fmt;
 	unsigned int i;
 
 	for (i = 0; i < ARRAY_SIZE(sc_formats); ++i) {
 		sc_fmt = &sc_formats[i];
-		if (sc_fmt->pixelformat == pixfmt) {
-			if (!!(sc_fmt->cfg_val & SCALER_CFG_TILE_EN)) {
-				/* tile mode is not supported from v3.0.0 */
-				if (sc->version >= SCALER_VERSION(3, 0, 0))
-					return NULL;
-				if (!output_buf)
-					return NULL;
-			}
-			/* bytes swap is not supported under v2.1.0 */
-			if (!!(sc_fmt->cfg_val & SCALER_CFG_SWAP_MASK) &&
-					(sc->version < SCALER_VERSION(2, 1, 0)))
+		if (sc_fmt->pixelformat == f->fmt.pix_mp.pixelformat) {
+			if (!V4L2_TYPE_IS_OUTPUT(f->type) &&
+				sc_fmt->pixelformat == V4L2_PIX_FMT_NV12MT_16X16)
 				return NULL;
-			return &sc_formats[i];
+			else
+				return &sc_formats[i];
 		}
 	}
 
@@ -330,7 +278,7 @@ static int sc_v4l2_querycap(struct file *file, void *fh,
 static int sc_v4l2_enum_fmt_mplane(struct file *file, void *fh,
 			     struct v4l2_fmtdesc *f)
 {
-	const struct sc_fmt *sc_fmt;
+	struct sc_fmt *sc_fmt;
 
 	if (f->index >= ARRAY_SIZE(sc_formats))
 		return -EINVAL;
@@ -346,7 +294,7 @@ static int sc_v4l2_g_fmt_mplane(struct file *file, void *fh,
 			  struct v4l2_format *f)
 {
 	struct sc_ctx *ctx = fh_to_sc_ctx(fh);
-	const struct sc_fmt *sc_fmt;
+	struct sc_fmt *sc_fmt;
 	struct sc_frame *frame;
 	struct v4l2_pix_format_mplane *pixm = &f->fmt.pix_mp;
 	int i;
@@ -391,12 +339,10 @@ static int sc_v4l2_try_fmt_mplane(struct file *file, void *fh,
 			    struct v4l2_format *f)
 {
 	struct sc_ctx *ctx = fh_to_sc_ctx(fh);
-	const struct sc_fmt *sc_fmt;
+	struct sc_fmt *sc_fmt;
 	struct v4l2_pix_format_mplane *pixm = &f->fmt.pix_mp;
-	const struct sc_size_limit *limit;
+	struct sc_size_limit *limit;
 	int i;
-	int h_align = 0;
-	int w_align = 0;
 
 	if (!V4L2_TYPE_IS_MULTIPLANAR(f->type)) {
 		v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
@@ -404,7 +350,7 @@ static int sc_v4l2_try_fmt_mplane(struct file *file, void *fh,
 		return -EINVAL;
 	}
 
-	sc_fmt = sc_find_format(ctx->sc_dev, f->fmt.pix_mp.pixelformat, V4L2_TYPE_IS_OUTPUT(f->type));
+	sc_fmt = sc_find_format(ctx->sc_dev, f);
 	if (!sc_fmt) {
 		v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
 				"not supported format type\n");
@@ -422,12 +368,12 @@ static int sc_v4l2_try_fmt_mplane(struct file *file, void *fh,
 	 */
 	if (sc_fmt_is_yuv422(sc_fmt->pixelformat) ||
 			sc_fmt_is_yuv420(sc_fmt->pixelformat))
-		w_align = 1;
+		limit->align_w = 1;
 
 	/* Bound an image to have width and height in limit */
 	v4l_bound_align_image(&pixm->width, limit->min_w, limit->max_w,
-			w_align, &pixm->height, limit->min_h,
-			limit->max_h, h_align, 0);
+			limit->align_w, &pixm->height, limit->min_h,
+			limit->max_h, limit->align_h, 0);
 
 	pixm->num_planes = sc_fmt->num_planes;
 	pixm->colorspace = 0;
@@ -463,10 +409,8 @@ static int sc_v4l2_s_fmt_mplane(struct file *file, void *fh,
 	struct vb2_queue *vq = v4l2_m2m_get_vq(ctx->m2m_ctx, f->type);
 	struct sc_frame *frame;
 	struct v4l2_pix_format_mplane *pixm = &f->fmt.pix_mp;
-	const struct sc_size_limit *limitout =
-				&ctx->sc_dev->variant->limit_input;
-	const struct sc_size_limit *limitcap =
-				&ctx->sc_dev->variant->limit_output;
+	struct sc_size_limit *limitout = &ctx->sc_dev->variant->limit_input;
+	struct sc_size_limit *limitcap = &ctx->sc_dev->variant->limit_output;
 	int i, ret = 0;
 
 	if (vb2_is_streaming(vq)) {
@@ -484,7 +428,7 @@ static int sc_v4l2_s_fmt_mplane(struct file *file, void *fh,
 
 	set_bit(CTX_PARAMS, &ctx->flags);
 
-	frame->sc_fmt = sc_find_format(ctx->sc_dev, f->fmt.pix_mp.pixelformat, V4L2_TYPE_IS_OUTPUT(f->type));
+	frame->sc_fmt = sc_find_format(ctx->sc_dev, f);
 	if (!frame->sc_fmt) {
 		v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
 				"not supported format values\n");
@@ -544,6 +488,9 @@ static int sc_v4l2_reqbufs(struct file *file, void *fh,
 			    struct v4l2_requestbuffers *reqbufs)
 {
 	struct sc_ctx *ctx = fh_to_sc_ctx(fh);
+	struct sc_dev *sc = ctx->sc_dev;
+
+	sc->vb2->set_cacheable(sc->alloc_ctx, ctx->cacheable);
 
 	return v4l2_m2m_reqbufs(file, ctx->m2m_ctx, reqbufs);
 }
@@ -622,10 +569,8 @@ static int sc_v4l2_s_crop(struct file *file, void *fh, struct v4l2_crop *cr)
 	struct sc_ctx *ctx = fh_to_sc_ctx(fh);
 	struct sc_dev *sc = ctx->sc_dev;
 	struct sc_frame *frame;
-	const struct sc_size_limit *limit = NULL;
+	struct sc_size_limit *limit = NULL;
 	int x_align = 0, y_align = 0;
-	int w_align = 0;
-	int h_align = 0;
 
 	frame = ctx_get_frame(ctx, cr->type);
 	if (IS_ERR(frame))
@@ -653,16 +598,16 @@ static int sc_v4l2_s_crop(struct file *file, void *fh, struct v4l2_crop *cr)
 	}
 
 	if (sc_fmt_is_yuv422(frame->sc_fmt->pixelformat)) {
-		w_align = 1;
+		limit->align_w = 1;
 	} else if (sc_fmt_is_yuv420(frame->sc_fmt->pixelformat)) {
-		w_align = 1;
-		h_align = 1;
+		limit->align_w = 1;
+		limit->align_h = 1;
 	}
 
 	/* Bound an image to have crop width and height in limit */
 	v4l_bound_align_image(&cr->c.width, limit->min_w, limit->max_w,
-			w_align, &cr->c.height, limit->min_h,
-			limit->max_h, h_align, 0);
+			limit->align_w, &cr->c.height, limit->min_h,
+			limit->max_h, limit->align_h, 0);
 
 	if (V4L2_TYPE_IS_OUTPUT(cr->type)) {
 		if (sc_fmt_is_yuv422(frame->sc_fmt->pixelformat))
@@ -680,15 +625,6 @@ static int sc_v4l2_s_crop(struct file *file, void *fh, struct v4l2_crop *cr)
 	v4l_bound_align_image(&cr->c.left, 0, frame->width - cr->c.width,
 			x_align, &cr->c.top, 0, frame->height - cr->c.height,
 			y_align, 0);
-
-	if ((frame->width < (cr->c.left + cr->c.width)) ||
-		(frame->height < (cr->c.top + cr->c.height))) {
-		v4l2_err(&ctx->sc_dev->m2m.v4l2_dev,
-			"Out of crop range: (%d,%d,%d,%d) from %dx%d\n",
-			cr->c.left, cr->c.top, cr->c.width, cr->c.height,
-			frame->width, frame->height);
-		return -EINVAL;
-	}
 
 	frame->crop.top = cr->c.top;
 	frame->crop.left = cr->c.left;
@@ -1075,52 +1011,19 @@ static int sc_find_scaling_ratio(struct sc_ctx *ctx)
 	if ((h_ratio > sc->variant->sc_down_min) ||
 				(v_ratio > sc->variant->sc_down_min)) {
 		struct v4l2_rect crop = ctx->d_frame.crop;
-		const struct sc_size_limit *limit;
+		struct sc_size_limit *limit;
 		unsigned int halign = 0, walign = 0;
 		__u32 pixfmt;
-		const struct sc_fmt *target_fmt = ctx->d_frame.sc_fmt;
+		struct sc_fmt *target_fmt = ctx->d_frame.sc_fmt;
 
 		if (!allocate_intermediate_frame(ctx))
 			return -ENOMEM;
 
-		limit = &sc->variant->limit_input;
-		if (v_ratio > sc->variant->sc_down_min) {
+		if (v_ratio > sc->variant->sc_down_min)
 			crop.height = ((src_height + 7) / 8) * 2;
-			if (crop.height < limit->min_h) {
-				if (SCALE_RATIO(limit->min_h,
-					ctx->d_frame.crop.height) >
-						sc->variant->sc_down_min) {
-					dev_err(sc->dev,
-					"Failed height scale down %d -> %d\n",
-					src_height,
-					ctx->d_frame.crop.height);
 
-					free_intermediate_frame(ctx);
-					return -EINVAL;
-				}
-
-				crop.height = limit->min_h;
-			}
-		}
-
-		if (h_ratio > sc->variant->sc_down_min) {
+		if (h_ratio > sc->variant->sc_down_min)
 			crop.width = ((src_width + 7) / 8) * 2;
-			if (crop.width < limit->min_w) {
-				if (SCALE_RATIO(limit->min_w,
-					ctx->d_frame.crop.width) >
-						sc->variant->sc_down_min) {
-					dev_err(sc->dev,
-					"Failed width scale down %d -> %d\n",
-					src_width,
-					ctx->d_frame.crop.width);
-
-					free_intermediate_frame(ctx);
-					return -EINVAL;
-				}
-
-				crop.width = limit->min_w;
-			}
-		}
 
 		pixfmt = target_fmt->pixelformat;
 
@@ -1168,38 +1071,6 @@ static int sc_find_scaling_ratio(struct sc_ctx *ctx)
 	return 0;
 }
 
-static void sc_fence_work(struct work_struct *work)
-{
-	struct vb2_sc_buffer *svb =
-			container_of(work, struct vb2_sc_buffer, work);
-	struct sc_ctx *ctx = vb2_get_drv_priv(svb->mb.vb.vb2_queue);
-	struct sync_fence *fence;
-	int ret;
-
-	/* Buffers do not have acquire_fence are never pushed to workqueue */
-	BUG_ON(svb->mb.vb.acquire_fence == NULL);
-	BUG_ON(!ctx->m2m_ctx);
-
-	fence = svb->mb.vb.acquire_fence;
-	svb->mb.vb.acquire_fence = NULL;
-
-	ret = sync_fence_wait(fence, 1000);
-	if (ret == -ETIME) {
-		dev_warn(ctx->sc_dev->dev, "sync_fence_wait() timeout\n");
-		ret = sync_fence_wait(fence, 10 * MSEC_PER_SEC);
-
-		if (ret)
-			dev_warn(ctx->sc_dev->dev,
-					"sync_fence_wait() error (%d)\n", ret);
-	}
-
-	sync_fence_put(fence);
-
-	/* OK to preceed the timed out buffers: It does not harm the system */
-	v4l2_m2m_buf_queue(ctx->m2m_ctx, &svb->mb.vb);
-	v4l2_m2m_try_schedule(ctx->m2m_ctx);
-}
-
 static int sc_vb2_queue_setup(struct vb2_queue *vq,
 		const struct v4l2_format *fmt, unsigned int *num_buffers,
 		unsigned int *num_planes, unsigned int sizes[],
@@ -1228,16 +1099,6 @@ static int sc_vb2_queue_setup(struct vb2_queue *vq,
 	return vb2_queue_init(vq);
 }
 
-static int sc_vb2_buf_init(struct vb2_buffer *vb)
-{
-	struct v4l2_m2m_buffer *mb = container_of(vb, typeof(*mb), vb);
-	struct vb2_sc_buffer *svb = container_of(mb, typeof(*svb), mb);
-
-	INIT_WORK(&svb->work, sc_fence_work);
-
-	return 0;
-}
-
 static int sc_vb2_buf_prepare(struct vb2_buffer *vb)
 {
 	struct sc_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
@@ -1261,14 +1122,63 @@ static int sc_vb2_buf_finish(struct vb2_buffer *vb)
 	return sc_buf_sync_finish(vb);
 }
 
+static void sc_fence_work(struct work_struct *work)
+{
+	struct sc_ctx *ctx = container_of(work, struct sc_ctx, fence_work);
+	struct v4l2_m2m_buffer *buffer;
+	struct sync_fence *fence;
+	unsigned long flags;
+	int ret;
+
+	spin_lock_irqsave(&ctx->slock, flags);
+
+	while (!list_empty(&ctx->fence_wait_list)) {
+		buffer = list_first_entry(&ctx->fence_wait_list,
+					  struct v4l2_m2m_buffer, wait);
+		list_del(&buffer->wait);
+		spin_unlock_irqrestore(&ctx->slock, flags);
+
+		fence = buffer->vb.acquire_fence;
+		if (fence) {
+			buffer->vb.acquire_fence = NULL;
+			ret = sync_fence_wait(fence, 1000);
+			if (ret == -ETIME) {
+				dev_warn(ctx->sc_dev->dev,
+					"sync_fence_wait() timeout\n");
+				ret = sync_fence_wait(fence, 10 * MSEC_PER_SEC);
+			}
+			if (ret)
+				dev_warn(ctx->sc_dev->dev,
+					"sync_fence_wait() error\n");
+			sync_fence_put(fence);
+		}
+
+		if (ctx->m2m_ctx) {
+			v4l2_m2m_buf_queue(ctx->m2m_ctx, &buffer->vb);
+			v4l2_m2m_try_schedule(ctx->m2m_ctx);
+		}
+
+		spin_lock_irqsave(&ctx->slock, flags);
+	}
+
+	spin_unlock_irqrestore(&ctx->slock, flags);
+}
+
 static void sc_vb2_buf_queue(struct vb2_buffer *vb)
 {
 	struct sc_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
+	struct v4l2_m2m_buffer *b =
+		container_of(vb, struct v4l2_m2m_buffer, vb);
+	struct sync_fence *fence;
+	unsigned long flags;
 
-	if (vb->acquire_fence) {
-		struct v4l2_m2m_buffer *mb = container_of(vb, typeof(*mb), vb);
-		struct vb2_sc_buffer *svb = container_of(mb, typeof(*svb), mb);
-		queue_work(ctx->sc_dev->fence_wq, &svb->work);
+	fence = vb->acquire_fence;
+	if (fence) {
+		spin_lock_irqsave(&ctx->slock, flags);
+		list_add_tail(&b->wait, &ctx->fence_wait_list);
+		spin_unlock_irqrestore(&ctx->slock, flags);
+
+		queue_work(ctx->fence_wq, &ctx->fence_work);
 	} else {
 		if (ctx->m2m_ctx)
 			v4l2_m2m_buf_queue(ctx->m2m_ctx, vb);
@@ -1310,15 +1220,19 @@ static int sc_vb2_stop_streaming(struct vb2_queue *vq)
 }
 
 static struct vb2_ops sc_vb2_ops = {
-	.queue_setup		= sc_vb2_queue_setup,
-	.buf_init		= sc_vb2_buf_init,
-	.buf_prepare		= sc_vb2_buf_prepare,
-	.buf_finish		= sc_vb2_buf_finish,
-	.buf_queue		= sc_vb2_buf_queue,
-	.wait_finish		= sc_vb2_lock,
-	.wait_prepare		= sc_vb2_unlock,
-	.start_streaming	= sc_vb2_start_streaming,
-	.stop_streaming		= sc_vb2_stop_streaming,
+	.queue_setup		 = sc_vb2_queue_setup,
+	.buf_prepare		 = sc_vb2_buf_prepare,
+	.buf_finish		 = sc_vb2_buf_finish,
+	.buf_queue		 = sc_vb2_buf_queue,
+	.wait_finish		 = sc_vb2_lock,
+	.wait_prepare		 = sc_vb2_unlock,
+	.start_streaming	 = sc_vb2_start_streaming,
+	.stop_streaming		 = sc_vb2_stop_streaming,
+};
+
+struct vb2_scaler_buffer {
+	struct v4l2_m2m_buffer mb;
+	unsigned long long hw_latency;
 };
 
 static int queue_init(void *priv, struct vb2_queue *src_vq,
@@ -1331,9 +1245,9 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	src_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	src_vq->ops = &sc_vb2_ops;
-	src_vq->mem_ops = &vb2_ion_memops;
+	src_vq->mem_ops = ctx->sc_dev->vb2->ops;
 	src_vq->drv_priv = ctx;
-	src_vq->buf_struct_size = sizeof(struct vb2_sc_buffer);
+	src_vq->buf_struct_size = sizeof(struct vb2_scaler_buffer);
 	src_vq->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 
 	ret = vb2_queue_init(src_vq);
@@ -1344,9 +1258,9 @@ static int queue_init(void *priv, struct vb2_queue *src_vq,
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	dst_vq->io_modes = VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
 	dst_vq->ops = &sc_vb2_ops;
-	dst_vq->mem_ops = &vb2_ion_memops;
+	dst_vq->mem_ops = ctx->sc_dev->vb2->ops;
 	dst_vq->drv_priv = ctx;
-	dst_vq->buf_struct_size = sizeof(struct vb2_sc_buffer);
+	dst_vq->buf_struct_size = sizeof(struct vb2_scaler_buffer);
 	dst_vq->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 
 	return vb2_queue_init(dst_vq);
@@ -1375,16 +1289,13 @@ static int sc_s_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_ROTATE:
 		ctx->rotation = ctrl->val;
 		break;
+	case V4L2_CID_CACHEABLE:
+		ctx->cacheable = (bool)ctrl->val;
+		break;
 	case V4L2_CID_GLOBAL_ALPHA:
 		ctx->g_alpha = ctrl->val;
 		break;
 	case V4L2_CID_2D_BLEND_OP:
-		if (ctx->sc_dev->version >= SCALER_VERSION(2, 2, 0)) {
-			dev_err(ctx->sc_dev->dev,
-				"%s: blending is not supported from v2.2.0\n",
-				__func__);
-			return -EINVAL;
-		}
 		ctx->bl_op = ctrl->val;
 		break;
 	case V4L2_CID_2D_FMT_PREMULTI:
@@ -1410,6 +1321,16 @@ static const struct v4l2_ctrl_ops sc_ctrl_ops = {
 
 static const struct v4l2_ctrl_config sc_custom_ctrl[] = {
 	{
+		.ops = &sc_ctrl_ops,
+		.id = V4L2_CID_CACHEABLE,
+		.name = "set cacheable",
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.flags = V4L2_CTRL_FLAG_SLIDER,
+		.step = 1,
+		.min = false,
+		.max = true,
+		.def = true,
+	}, {
 		.ops = &sc_ctrl_ops,
 		.id = V4L2_CID_GLOBAL_ALPHA,
 		.name = "Set constant src alpha",
@@ -1513,9 +1434,6 @@ static int sc_open(struct file *file)
 	}
 
 	atomic_inc(&sc->m2m.in_use);
-
-	ctx->context_type = SC_CTX_V4L2_TYPE;
-	INIT_LIST_HEAD(&ctx->node);
 	ctx->sc_dev = sc;
 
 	v4l2_fh_init(&ctx->fh, sc->m2m.vfd);
@@ -1530,12 +1448,15 @@ static int sc_open(struct file *file)
 	/* Default color format */
 	ctx->s_frame.sc_fmt = &sc_formats[0];
 	ctx->d_frame.sc_fmt = &sc_formats[0];
+	init_waitqueue_head(&sc->wait);
+	spin_lock_init(&ctx->slock);
 
-	ret = clk_prepare(sc->aclk);
-	if (ret) {
-		dev_err(sc->dev, "%s: failed to prepare ACLK(err %d)\n",
-				__func__, ret);
-		goto err_clk_prepare;
+	INIT_LIST_HEAD(&ctx->fence_wait_list);
+	INIT_WORK(&ctx->fence_work, sc_fence_work);
+	ctx->fence_wq = create_singlethread_workqueue("sc_wq");
+	if (ctx->fence_wq == NULL) {
+		dev_err(sc->dev, "failed to create work queue\n");
+		goto err_wq;
 	}
 
 	/* Setup the device context for mem2mem mode. */
@@ -1548,8 +1469,9 @@ static int sc_open(struct file *file)
 	return 0;
 
 err_ctx:
-	clk_unprepare(sc->aclk);
-err_clk_prepare:
+	if (ctx->fence_wq)
+		destroy_workqueue(ctx->fence_wq);
+err_wq:
 	v4l2_fh_del(&ctx->fh);
 err_fh:
 	v4l2_ctrl_handler_free(&ctx->ctrl_handler);
@@ -1569,7 +1491,8 @@ static int sc_release(struct file *file)
 
 	destroy_intermediate_frame(ctx);
 	v4l2_m2m_ctx_release(ctx->m2m_ctx);
-	clk_unprepare(sc->aclk);
+	if (ctx->fence_wq)
+		destroy_workqueue(ctx->fence_wq);
 	v4l2_ctrl_handler_free(&ctx->ctrl_handler);
 	v4l2_fh_del(&ctx->fh);
 	v4l2_fh_exit(&ctx->fh);
@@ -1603,6 +1526,35 @@ static const struct v4l2_file_operations sc_v4l2_fops = {
 	.mmap		= sc_mmap,
 };
 
+static int sc_clock_gating(struct sc_dev *sc, enum sc_clk_status status)
+{
+	if (status == SC_CLK_ON) {
+		if (sc->aclk) {
+			int ret = clk_enable(sc->aclk);
+			if (ret) {
+				dev_err(sc->dev,
+					"%s: Failed to enable clock: %d\n",
+					__func__, ret);
+				return ret;
+			}
+		}
+
+		atomic_inc(&sc->clk_cnt);
+		dev_dbg(sc->dev, "clock enabled\n");
+	} else if (status == SC_CLK_OFF) {
+		if (WARN_ON(atomic_dec_return(&sc->clk_cnt) < 0)) {
+			dev_err(sc->dev, "scaler clock control is wrong!!\n");
+			atomic_set(&sc->clk_cnt, 0);
+		} else {
+			if (sc->aclk)
+				clk_disable(sc->aclk);
+			dev_dbg(sc->dev, "clock disabled\n");
+		}
+	}
+
+	return 0;
+}
+
 static void sc_watchdog(unsigned long arg)
 {
 	struct sc_dev *sc = (struct sc_dev *)arg;
@@ -1612,57 +1564,34 @@ static void sc_watchdog(unsigned long arg)
 
 	sc_dbg("timeout watchdog\n");
 	if (atomic_read(&sc->wdt.cnt) >= SC_WDT_CNT) {
-		sc_hwset_soft_reset(sc);
-		clk_disable(sc->aclk);
+		sc_clock_gating(sc, SC_CLK_OFF);
 		pm_runtime_put(sc->dev);
 
 		sc_dbg("wakeup blocked process\n");
 		atomic_set(&sc->wdt.cnt, 0);
 		clear_bit(DEV_RUN, &sc->state);
 
-		spin_lock_irqsave(&sc->ctxlist_lock, flags);
-		ctx = sc->current_ctx;
-		sc->current_ctx = NULL;
-		spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
-
-		BUG_ON(!ctx);
-
+		ctx = v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev);
+		if (!ctx || !ctx->m2m_ctx) {
+			dev_err(sc->dev, "current ctx is NULL\n");
+			return;
+		}
 		spin_lock_irqsave(&sc->slock, flags);
+		clear_bit(CTX_RUN, &ctx->flags);
+		src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+		dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 
-		if (ctx->context_type == SC_CTX_V4L2_TYPE) {
-			ctx = v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev);
-			if (!ctx || !ctx->m2m_ctx) {
-				dev_err(sc->dev, "current ctx is NULL\n");
-				return;
-
-			}
-			clear_bit(CTX_RUN, &ctx->flags);
-
-			src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-			dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
-
-			BUG_ON(!src_vb || !dst_vb);
-
+		if (src_vb && dst_vb) {
 			v4l2_m2m_buf_done(src_vb, VB2_BUF_STATE_ERROR);
 			v4l2_m2m_buf_done(dst_vb, VB2_BUF_STATE_ERROR);
 
 			v4l2_m2m_job_finish(sc->m2m.m2m_dev, ctx->m2m_ctx);
-		} else {
-			struct m2m1shot_task *task =
-					m2m1shot_get_current_task(sc->m21dev);
-
-			BUG_ON(ctx->context_type != SC_CTX_M2M1SHOT_TYPE);
-
-			m2m1shot_task_finish(sc->m21dev, task, true);
 		}
-
 		spin_unlock_irqrestore(&sc->slock, flags);
 		return;
 	}
 
 	if (test_bit(DEV_RUN, &sc->state)) {
-		sc_hwregs_dump(sc);
-		exynos_sysmmu_show_status(sc->dev);
 		atomic_inc(&sc->wdt.cnt);
 		dev_err(sc->dev, "scaler is still running\n");
 		sc->wdt.timer.expires = jiffies + SC_TIMEOUT;
@@ -1682,9 +1611,9 @@ static void sc_set_csc_coef(struct sc_ctx *ctx)
 	s_frame = &ctx->s_frame;
 	d_frame = &ctx->d_frame;
 
-	if (s_frame->sc_fmt->is_rgb == d_frame->sc_fmt->is_rgb)
+	if (s_frame->sc_fmt->color == d_frame->sc_fmt->color)
 		idx = NO_CSC;
-	else if (s_frame->sc_fmt->is_rgb)
+	else if (sc_fmt_is_rgb(s_frame->sc_fmt->color))
 		idx = CSC_R2Y;
 	else
 		idx = CSC_Y2R;
@@ -1692,23 +1621,24 @@ static void sc_set_csc_coef(struct sc_ctx *ctx)
 	sc_hwset_csc_coef(sc, idx, &ctx->csc);
 }
 
-static const __u32 sc_scaling_ratio[] = {
-	65536,	/* 0: 8:8 scaing or zoom-in */
-	74898,	/* 1: 8:7 zoom-out */
-	87381,	/* 2: 8:6 zoom-out */
-	104857,	/* 3: 8:5 zoom-out */
-	131072,	/* 4: 8:4 zoom-out */
-	174762,	/* 5: 8:3 zoom-out */
-	/* higher ratio -> 6: 8:2 zoom-out */
-};
-
-static unsigned int sc_get_scale_filter(unsigned int ratio)
+static int sc_get_scale_filter(unsigned int ratio)
 {
-	unsigned int filter;
+	int filter;
 
-	for (filter = 0; filter < ARRAY_SIZE(sc_scaling_ratio); filter++)
-		if (ratio < sc_scaling_ratio[filter])
-			return filter;
+	if (ratio <= 65536)
+		filter = 0;	/* 8:8 or zoom-in */
+	else if (ratio <= 74898)
+		filter = 1;	/* 8:7 zoom-out */
+	else if (ratio <= 87381)
+		filter = 2;	/* 8:6 zoom-out */
+	else if (ratio <= 104857)
+		filter = 3;	/* 8:5 zoom-out */
+	else if (ratio <= 131072)
+		filter = 4;	/* 8:4 zoom-out */
+	else if (ratio <= 174762)
+		filter = 5;	/* 8:3 zoom-out */
+	else
+		filter = 6;	/* 8:2 zoom-out */
 
 	return filter;
 }
@@ -1716,7 +1646,7 @@ static unsigned int sc_get_scale_filter(unsigned int ratio)
 static void sc_set_scale_coef(struct sc_dev *sc, unsigned int h_ratio,
 				unsigned int v_ratio)
 {
-	unsigned int h_coef, v_coef;
+	int h_coef, v_coef;
 
 	h_coef = sc_get_scale_filter(h_ratio);
 	v_coef = sc_get_scale_filter(v_ratio);
@@ -1737,7 +1667,7 @@ static void sc_set_scale_ratio(struct sc_dev *sc,
 static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 {
 	struct sc_frame *s_frame, *d_frame;
-	const struct sc_size_limit *limit;
+	struct sc_size_limit *limit;
 	unsigned int halign = 0, walign = 0;
 
 	if (!test_bit(CTX_INT_FRAME, &ctx->flags))
@@ -1766,8 +1696,8 @@ static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 		SCALE_RATIO(s_frame->crop.width, d_frame->crop.width),
 		SCALE_RATIO(s_frame->crop.height, d_frame->crop.height));
 
-	sc_hwset_src_image_format(sc, s_frame->sc_fmt);
-	sc_hwset_dst_image_format(sc, d_frame->sc_fmt);
+	sc_hwset_src_image_format(sc, s_frame->sc_fmt->pixelformat);
+	sc_hwset_dst_image_format(sc, d_frame->sc_fmt->pixelformat);
 	sc_hwset_src_imgsize(sc, s_frame);
 	sc_hwset_dst_imgsize(sc, d_frame);
 	sc_hwset_src_crop(sc, &s_frame->crop, s_frame->sc_fmt);
@@ -1785,185 +1715,6 @@ static bool sc_process_2nd_stage(struct sc_dev *sc, struct sc_ctx *ctx)
 	return true;
 }
 
-static void sc_set_dithering(struct sc_ctx *ctx)
-{
-	struct sc_dev *sc = ctx->sc_dev;
-	unsigned int val = 0;
-
-	if (ctx->dith)
-		val = sc_dith_val(1, 1, 1);
-
-	sc_dbg("dither value is 0x%x\n", val);
-	sc_hwset_dith(sc, val);
-}
-
-/*
- * 'Prefetch' is not required by Scaler
- * because fetch larger region is more beneficial for rotation
- */
-#define SC_SRC_PBCONFIG	(SYSMMU_PBUFCFG_TLB_UPDATE |		\
-			SYSMMU_PBUFCFG_ASCENDING | SYSMMU_PBUFCFG_READ)
-#define SC_DST_PBCONFIG	(SYSMMU_PBUFCFG_TLB_UPDATE |		\
-			SYSMMU_PBUFCFG_ASCENDING | SYSMMU_PBUFCFG_WRITE)
-
-static void sc_set_prefetch_buffers(struct device *dev, struct sc_ctx *ctx)
-{
-	struct sc_frame *s_frame = &ctx->s_frame;
-	struct sc_frame *d_frame = &ctx->d_frame;
-	struct sysmmu_prefbuf pb_reg[6];
-	unsigned int i = 0;
-
-	pb_reg[i].base = s_frame->addr.y;
-	pb_reg[i].size = s_frame->addr.ysize;
-	pb_reg[i++].config = SC_SRC_PBCONFIG;
-	if (s_frame->sc_fmt->num_comp >= 2) {
-		pb_reg[i].base = s_frame->addr.cb;
-		pb_reg[i].size = s_frame->addr.cbsize;
-		pb_reg[i++].config = SC_SRC_PBCONFIG;
-	}
-	if (s_frame->sc_fmt->num_comp >= 3) {
-		pb_reg[i].base = s_frame->addr.cr;
-		pb_reg[i].size = s_frame->addr.crsize;
-		pb_reg[i++].config = SC_SRC_PBCONFIG;
-	}
-
-	pb_reg[i].base = d_frame->addr.y;
-	pb_reg[i].size = d_frame->addr.ysize;
-	pb_reg[i++].config = SC_DST_PBCONFIG;
-	if (d_frame->sc_fmt->num_comp >= 2) {
-		pb_reg[i].base = d_frame->addr.cb;
-		pb_reg[i].size = d_frame->addr.cbsize;
-		pb_reg[i++].config = SC_DST_PBCONFIG;
-	}
-	if (d_frame->sc_fmt->num_comp >= 3) {
-		pb_reg[i].base = d_frame->addr.cr;
-		pb_reg[i].size = d_frame->addr.crsize;
-		pb_reg[i++].config = SC_DST_PBCONFIG;
-	}
-
-	sysmmu_set_prefetch_buffer_by_region(dev, pb_reg, i);
-}
-
-static int sc_run_next_job(struct sc_dev *sc)
-{
-	unsigned long flags;
-	struct sc_ctx *ctx;
-	struct sc_frame *d_frame, *s_frame;
-	int ret;
-
-	spin_lock_irqsave(&sc->ctxlist_lock, flags);
-
-	if (sc->current_ctx || list_empty(&sc->context_list)) {
-		/* a job is currently being processed or no job is to run */
-		spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
-		return 0;
-	}
-
-	ctx = list_first_entry(&sc->context_list, struct sc_ctx, node);
-
-	list_del_init(&ctx->node);
-
-	sc->current_ctx = ctx;
-
-	spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
-
-	/*
-	 * sc_run_next_job() must not reenter while sc->state is DEV_RUN.
-	 * DEV_RUN is cleared when an operation is finished.
-	 */
-	BUG_ON(test_bit(DEV_RUN, &sc->state));
-
-	s_frame = &ctx->s_frame;
-	d_frame = &ctx->d_frame;
-
-	if (in_irq())
-		ret = pm_runtime_get(sc->dev);
-	else
-		ret = pm_runtime_get_sync(sc->dev);
-	if (ret < 0) {
-		dev_err(sc->dev,
-			"%s=%d: Failed to enable local power\n", __func__, ret);
-		return ret;
-	}
-
-	ret = clk_enable(sc->aclk);
-	if (ret) {
-		dev_err(sc->dev, "%s: Failed to enable clock (err %d)\n",
-			__func__, ret);
-		pm_runtime_put(sc->dev);
-		return ret;
-	}
-
-	sc_hwset_soft_reset(sc);
-
-	sc_set_scale_ratio(sc, ctx->h_ratio, ctx->v_ratio);
-	if (ctx->i_frame) {
-		set_bit(CTX_INT_FRAME, &ctx->flags);
-		d_frame = &ctx->i_frame->frame;
-	}
-
-	sc_set_csc_coef(ctx);
-
-	sc_hwset_src_image_format(sc, s_frame->sc_fmt);
-	sc_hwset_dst_image_format(sc, d_frame->sc_fmt);
-	if (ctx->pre_multi)
-		sc_hwset_pre_multi_format(sc);
-
-	sc_hwset_src_imgsize(sc, s_frame);
-	sc_hwset_dst_imgsize(sc, d_frame);
-	sc_hwset_src_crop(sc, &s_frame->crop, s_frame->sc_fmt);
-	sc_hwset_dst_crop(sc, &d_frame->crop);
-
-	sc_hwset_src_addr(sc, &s_frame->addr);
-	sc_hwset_dst_addr(sc, &d_frame->addr);
-
-	sc_set_dithering(ctx);
-
-	if (ctx->bl_op)
-		sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi, ctx->g_alpha);
-
-	sc_hwset_flip_rotation(sc, ctx->flip, ctx->rotation);
-	sc_hwset_int_en(sc, 1);
-
-	set_bit(DEV_RUN, &sc->state);
-	set_bit(CTX_RUN, &ctx->flags);
-
-	sc_set_prefetch_buffers(sc->dev, ctx);
-
-	sc->wdt.timer.expires = jiffies + SC_TIMEOUT;
-	add_timer(&sc->wdt.timer);
-
-	if (__measure_hw_latency) {
-		if (ctx->context_type == SC_CTX_V4L2_TYPE) {
-			struct vb2_buffer *vb =
-					v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
-			struct v4l2_m2m_buffer *mb =
-					container_of(vb, typeof(*mb), vb);
-			struct vb2_sc_buffer *svb =
-					container_of(mb, typeof(*svb), mb);
-
-			svb->ktime = ktime_get();
-		} else {
-			ctx->ktime_m2m1shot = ktime_get();
-		}
-	}
-
-	sc_hwset_start(sc);
-
-	return 0;
-}
-
-static int sc_add_context_and_run(struct sc_dev *sc, struct sc_ctx *ctx)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&sc->ctxlist_lock, flags);
-	list_add_tail(&ctx->node, &sc->context_list);
-	spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
-
-	return sc_run_next_job(sc);
-}
-
 static irqreturn_t sc_irq_handler(int irq, void *priv)
 {
 	struct sc_dev *sc = priv;
@@ -1975,45 +1726,40 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 
 	clear_bit(DEV_RUN, &sc->state);
 
+	if (timer_pending(&sc->wdt.timer))
+		del_timer(&sc->wdt.timer);
+
 	val = sc_hwget_int_status(sc);
 	sc_hwset_int_clear(sc);
 
-	/*
-	 * ok to access sc->current_ctx withot ctxlist_lock held
-	 * because it is not modified until sc_run_next_job() is called.
-	 */
-	ctx = sc->current_ctx;
-
-	BUG_ON(!ctx);
+	ctx = v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev);
+	if (!ctx || !ctx->m2m_ctx) {
+		sc_clock_gating(sc, SC_CLK_OFF);
+		pm_runtime_put(sc->dev);
+		dev_err(sc->dev, "current ctx is NULL\n");
+		goto isr_unlock;
+	}
 
 	if (sc_process_2nd_stage(sc, ctx))
 		goto isr_unlock;
 
-	clk_disable(sc->aclk);
-
+	sc_clock_gating(sc, SC_CLK_OFF);
 	pm_runtime_put(sc->dev);
 
 	clear_bit(CTX_RUN, &ctx->flags);
 
-	if (timer_pending(&sc->wdt.timer))
-		del_timer(&sc->wdt.timer);
+	src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
+	dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
 
-	if (ctx->context_type == SC_CTX_V4L2_TYPE) {
-		BUG_ON(ctx != v4l2_m2m_get_curr_priv(sc->m2m.m2m_dev));
-
-		src_vb = v4l2_m2m_src_buf_remove(ctx->m2m_ctx);
-		dst_vb = v4l2_m2m_dst_buf_remove(ctx->m2m_ctx);
-
-		BUG_ON(!src_vb || !dst_vb);
-
+	if (src_vb && dst_vb) {
 		if (__measure_hw_latency) {
 			struct v4l2_m2m_buffer *mb =
 					container_of(dst_vb, typeof(*mb), vb);
-			struct vb2_sc_buffer *svb =
+			struct vb2_scaler_buffer *svb =
 					container_of(mb, typeof(*svb), mb);
 
 			dst_vb->v4l2_buf.reserved2 =
-				(__u32)ktime_us_delta(ktime_get(), svb->ktime);
+				(__u32)(sched_clock() - svb->hw_latency);
 		}
 
 		if (val & SCALER_INT_STATUS_FRAME_END) {
@@ -2036,24 +1782,8 @@ static irqreturn_t sc_irq_handler(int irq, void *priv)
 		if (test_and_clear_bit(CTX_ABORT, &ctx->flags))
 			wake_up(&sc->wait);
 	} else {
-		struct m2m1shot_task *task =
-					m2m1shot_get_current_task(sc->m21dev);
-
-		BUG_ON(ctx->context_type != SC_CTX_M2M1SHOT_TYPE);
-
-		if (__measure_hw_latency)
-			task->task.reserved[1] =
-				(unsigned long)ktime_us_delta(
-					ktime_get(), ctx->ktime_m2m1shot);
-
-		m2m1shot_task_finish(sc->m21dev, task, true);
+		dev_err(sc->dev, "failed to get the buffer done\n");
 	}
-
-	spin_lock(&sc->ctxlist_lock);
-	sc->current_ctx = NULL;
-	spin_unlock(&sc->ctxlist_lock);
-
-	sc_run_next_job(sc);
 
 isr_unlock:
 	spin_unlock(&sc->slock);
@@ -2165,11 +1895,78 @@ static int sc_get_bufaddr(struct sc_dev *sc, struct vb2_buffer *vb2buf,
 	return 0;
 }
 
+static void sc_set_dithering(struct sc_ctx *ctx)
+{
+	struct sc_dev *sc = ctx->sc_dev;
+	unsigned int val = 0;
+
+	if (ctx->dith)
+		val = sc_dith_val(1, 1, 1);
+
+	sc_dbg("dither value is 0x%x\n", val);
+	sc_hwset_dith(sc, val);
+}
+
+/*
+ * 'Prefetch' is not required by Scaler
+ * because fetch larger region is more beneficial for rotation
+ */
+#define SC_SRC_PBCONFIG	(SYSMMU_PBUFCFG_TLB_UPDATE |		\
+			SYSMMU_PBUFCFG_ASCENDING | SYSMMU_PBUFCFG_READ)
+#define SC_DST_PBCONFIG	(SYSMMU_PBUFCFG_TLB_UPDATE |		\
+			SYSMMU_PBUFCFG_ASCENDING | SYSMMU_PBUFCFG_WRITE)
+
+static void sc_set_prefetch_buffers(struct device *dev, struct sc_ctx *ctx)
+{
+	struct sc_frame *s_frame = &ctx->s_frame;
+	struct sc_frame *d_frame = &ctx->d_frame;
+	struct sysmmu_prefbuf pb_reg[6];
+	unsigned int i = 0;
+
+	pb_reg[i].base = s_frame->addr.y;
+	pb_reg[i].size = s_frame->addr.ysize;
+	pb_reg[i++].config = SC_SRC_PBCONFIG;
+	if (s_frame->sc_fmt->num_comp >= 2) {
+		pb_reg[i].base = s_frame->addr.cb;
+		pb_reg[i].size = s_frame->addr.cbsize;
+		pb_reg[i++].config = SC_SRC_PBCONFIG;
+	}
+	if (s_frame->sc_fmt->num_comp >= 3) {
+		pb_reg[i].base = s_frame->addr.cr;
+		pb_reg[i].size = s_frame->addr.crsize;
+		pb_reg[i++].config = SC_SRC_PBCONFIG;
+	}
+
+	pb_reg[i].base = d_frame->addr.y;
+	pb_reg[i].size = d_frame->addr.ysize;
+	pb_reg[i++].config = SC_DST_PBCONFIG;
+	if (d_frame->sc_fmt->num_comp >= 2) {
+		pb_reg[i].base = d_frame->addr.cb;
+		pb_reg[i].size = d_frame->addr.cbsize;
+		pb_reg[i++].config = SC_DST_PBCONFIG;
+	}
+	if (d_frame->sc_fmt->num_comp >= 3) {
+		pb_reg[i].base = d_frame->addr.cr;
+		pb_reg[i].size = d_frame->addr.crsize;
+		pb_reg[i++].config = SC_DST_PBCONFIG;
+	}
+
+	sysmmu_set_prefetch_buffer_by_region(dev, pb_reg, i);
+}
+
 static void sc_m2m_device_run(void *priv)
 {
 	struct sc_ctx *ctx = priv;
-	struct sc_dev *sc = ctx->sc_dev;
+	struct sc_dev *sc;
 	struct sc_frame *s_frame, *d_frame;
+	int ret;
+
+	sc = ctx->sc_dev;
+
+	if (test_bit(DEV_RUN, &sc->state)) {
+		dev_err(sc->dev, "Scaler is already in progress\n");
+		return;
+	}
 
 	if (test_bit(DEV_SUSPEND, &sc->state)) {
 		dev_err(sc->dev, "Scaler is in suspend state\n");
@@ -2187,7 +1984,74 @@ static void sc_m2m_device_run(void *priv)
 	sc_get_bufaddr(sc, v4l2_m2m_next_src_buf(ctx->m2m_ctx), s_frame);
 	sc_get_bufaddr(sc, v4l2_m2m_next_dst_buf(ctx->m2m_ctx), d_frame);
 
-	sc_add_context_and_run(sc, ctx);
+	if (in_irq())
+		ret = pm_runtime_get(sc->dev);
+	else
+		ret = pm_runtime_get_sync(sc->dev);
+	if (ret < 0) {
+		dev_err(sc->dev,
+			"%s=%d: Failed to enable local power\n", __func__, ret);
+		return;
+	}
+
+	ret = sc_clock_gating(sc, SC_CLK_ON);
+	if (ret < 0) {
+		pm_runtime_put(sc->dev);
+		dev_err(sc->dev,
+			"%s=%d: Failed to enable clock\n", __func__, ret);
+		return;
+	}
+
+	sc_hwset_soft_reset(sc);
+
+	sc_set_scale_ratio(sc, ctx->h_ratio, ctx->v_ratio);
+	if (ctx->i_frame)
+		set_bit(CTX_INT_FRAME, &ctx->flags);
+
+	if (test_bit(CTX_INT_FRAME, &ctx->flags))
+		d_frame = &ctx->i_frame->frame;
+
+	sc_set_csc_coef(ctx);
+
+	sc_hwset_src_image_format(sc, s_frame->sc_fmt->pixelformat);
+	sc_hwset_dst_image_format(sc, d_frame->sc_fmt->pixelformat);
+	if (ctx->pre_multi)
+		sc_hwset_pre_multi_format(sc);
+
+	sc_hwset_src_imgsize(sc, s_frame);
+	sc_hwset_dst_imgsize(sc, d_frame);
+	sc_hwset_src_crop(sc, &s_frame->crop, s_frame->sc_fmt);
+	sc_hwset_dst_crop(sc, &d_frame->crop);
+
+	sc_hwset_src_addr(sc, &s_frame->addr);
+	sc_hwset_dst_addr(sc, &d_frame->addr);
+
+	sc_set_dithering(ctx);
+
+	if (ctx->bl_op)
+		sc_hwset_blend(sc, ctx->bl_op, ctx->pre_multi, ctx->g_alpha);
+
+	sc_hwset_flip_rotation(sc, ctx->flip, ctx->rotation);
+	sc_hwset_int_en(sc, 1);
+
+	sc->wdt.timer.expires = jiffies + SC_TIMEOUT;
+	add_timer(&sc->wdt.timer);
+
+	set_bit(DEV_RUN, &sc->state);
+	set_bit(CTX_RUN, &ctx->flags);
+
+	sc_set_prefetch_buffers(sc->dev, ctx);
+
+	if (__measure_hw_latency) {
+		struct vb2_buffer *vb = v4l2_m2m_next_dst_buf(ctx->m2m_ctx);
+		struct v4l2_m2m_buffer *mb = container_of(vb, typeof(*mb), vb);
+		struct vb2_scaler_buffer *svb =
+					container_of(mb, typeof(*svb), mb);
+
+		svb->hw_latency = sched_clock();
+	}
+
+	sc_hwset_start(sc);
 }
 
 static void sc_m2m_job_abort(void *priv)
@@ -2205,17 +2069,20 @@ static struct v4l2_m2m_ops sc_m2m_ops = {
 	.job_abort	= sc_m2m_job_abort,
 };
 
-static int sc_register_m2m_device(struct sc_dev *sc, int dev_id)
+static int sc_register_m2m_device(struct sc_dev *sc)
 {
 	struct v4l2_device *v4l2_dev;
 	struct device *dev;
 	struct video_device *vfd;
 	int ret = 0;
 
+	if (!sc)
+		return -ENODEV;
+
 	dev = sc->dev;
 	v4l2_dev = &sc->m2m.v4l2_dev;
 
-	scnprintf(v4l2_dev->name, sizeof(v4l2_dev->name), "%s.m2m",
+	snprintf(v4l2_dev->name, sizeof(v4l2_dev->name), "%s.m2m",
 			MODULE_NAME);
 
 	ret = v4l2_device_register(dev, v4l2_dev);
@@ -2235,7 +2102,7 @@ static int sc_register_m2m_device(struct sc_dev *sc, int dev_id)
 	vfd->release	= video_device_release;
 	vfd->lock	= &sc->lock;
 	vfd->vfl_dir	= VFL_DIR_M2M;
-	scnprintf(vfd->name, sizeof(vfd->name), "%s:m2m", MODULE_NAME);
+	snprintf(vfd->name, sizeof(vfd->name), "%s:m2m", MODULE_NAME);
 
 	video_set_drvdata(vfd, sc);
 
@@ -2248,7 +2115,7 @@ static int sc_register_m2m_device(struct sc_dev *sc, int dev_id)
 	}
 
 	ret = video_register_device(vfd, VFL_TYPE_GRABBER,
-				EXYNOS_VIDEONODE_SCALER(dev_id));
+				EXYNOS_VIDEONODE_SCALER(sc->id));
 	if (ret) {
 		dev_err(sc->dev, "failed to register video device\n");
 		goto err_m2m_dev;
@@ -2265,338 +2132,6 @@ err_v4l2_dev:
 
 	return ret;
 }
-
-static int sc_m2m1shot_init_context(struct m2m1shot_context *m21ctx)
-{
-	struct sc_dev *sc = dev_get_drvdata(m21ctx->m21dev->dev);
-	struct sc_ctx *ctx;
-	int ret;
-
-	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
-	if (!ctx)
-		return -ENOMEM;
-
-	atomic_inc(&sc->m2m.in_use);
-
-	ret = clk_prepare(sc->aclk);
-	if (ret) {
-		dev_err(sc->dev, "%s: failed to prepare ACLK(err %d)\n",
-				__func__, ret);
-		kfree(ctx);
-		return ret;
-	}
-
-	ctx->context_type = SC_CTX_M2M1SHOT_TYPE;
-	INIT_LIST_HEAD(&ctx->node);
-	ctx->sc_dev = sc;
-
-	ctx->s_frame.sc_fmt = &sc_formats[0];
-	ctx->d_frame.sc_fmt = &sc_formats[0];
-
-	m21ctx->priv = ctx;
-	ctx->m21_ctx = m21ctx;
-
-	return 0;
-}
-
-static int sc_m2m1shot_free_context(struct m2m1shot_context *m21ctx)
-{
-	struct sc_ctx *ctx = m21ctx->priv;
-
-	atomic_dec(&ctx->sc_dev->m2m.in_use);
-	clk_unprepare(ctx->sc_dev->aclk);
-	BUG_ON(!list_empty(&ctx->node));
-	destroy_intermediate_frame(ctx);
-	kfree(ctx);
-	return 0;
-}
-
-static int sc_m2m1shot_prepare_format(struct m2m1shot_context *m21ctx,
-			struct m2m1shot_pix_format *fmt,
-			enum dma_data_direction dir,
-			size_t bytes_used[])
-{
-	struct sc_ctx *ctx = m21ctx->priv;
-	struct sc_frame *frame = (dir == DMA_TO_DEVICE) ?
-					&ctx->s_frame : &ctx->d_frame;
-	s32 size_min = (dir == DMA_TO_DEVICE) ? 16 : 4;
-	int i;
-
-	frame->sc_fmt = sc_find_format(ctx->sc_dev, fmt->fmt,
-						(dir == DMA_TO_DEVICE));
-	if (!frame->sc_fmt) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: Pixel format %#x is not supported for %s\n",
-			__func__, fmt->fmt,
-			(dir == DMA_TO_DEVICE) ? "output" : "capture");
-		return -EINVAL;
-	}
-
-	if (!fmt->crop.width)
-		fmt->crop.width = fmt->width;
-	if (!fmt->crop.height)
-		fmt->crop.height = fmt->height;
-
-	if (!fmt->width || !fmt->height ||
-				!fmt->crop.width || !fmt->crop.height) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: neither width nor height can be zero\n",
-			__func__);
-		return -EINVAL;
-	}
-
-	if ((fmt->width > 8192) || (fmt->height > 8192)) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: requested image size %dx%d exceed 8192x8192\n",
-			__func__, fmt->width, fmt->height);
-		return -EINVAL;
-	}
-
-	if ((fmt->crop.width < size_min) || (fmt->crop.height < size_min)) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: image size %dx%d must not less than %dx%d\n",
-			__func__, fmt->width, fmt->height, size_min, size_min);
-		return -EINVAL;
-	}
-
-	if ((fmt->crop.left < 0) || (fmt->crop.top < 0)) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: negative crop offset(%d, %d) is not supported\n",
-			__func__, fmt->crop.left, fmt->crop.top);
-		return -EINVAL;
-	}
-
-	if ((fmt->width < (fmt->crop.width + fmt->crop.left)) ||
-		(fmt->height < (fmt->crop.height + fmt->crop.top))) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: crop region(%d,%d,%d,%d) is larger than image\n",
-			__func__, fmt->crop.left, fmt->crop.top,
-			fmt->crop.width, fmt->crop.height);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < frame->sc_fmt->num_planes; i++) {
-		if (sc_fmt_is_ayv12(fmt->fmt)) {
-			unsigned int y_size, c_span;
-			y_size = fmt->width * fmt->height;
-			c_span = ALIGN(fmt->width / 2, 16);
-			bytes_used[i] = y_size + (c_span * fmt->height / 2) * 2;
-		} else {
-			bytes_used[i] = fmt->width * fmt->height;
-			bytes_used[i] *= frame->sc_fmt->bitperpixel[i];
-			bytes_used[i] /= 8;
-		}
-	}
-
-	frame->width = fmt->width;
-	frame->height = fmt->height;
-	frame->crop = fmt->crop;
-
-	return frame->sc_fmt->num_planes;
-}
-
-static int sc_m2m1shot_prepare_operation(struct m2m1shot_context *m21ctx,
-						struct m2m1shot_task *task)
-{
-	struct sc_ctx *ctx = m21ctx->priv;
-	struct m2m1shot *shot = &task->task;
-
-	if ((shot->op.rotate != 0) && (shot->op.rotate != 90) &&
-			(shot->op.rotate != 180) && (shot->op.rotate != 270)) {
-		dev_err(ctx->sc_dev->dev,
-			"%s: rotation degree %d is not supported\n",
-			__func__, shot->op.rotate);
-		return -EINVAL;
-	}
-
-	ctx->rotation = shot->op.rotate;
-
-	ctx->flip &= ~(SC_VFLIP | SC_HFLIP);
-
-	if (shot->op.op & M2M1SHOT_OP_FLIP_VIRT)
-		ctx->flip |= SC_VFLIP;
-
-	if (shot->op.op & M2M1SHOT_OP_FLIP_HORI)
-		ctx->flip |= SC_HFLIP;
-
-	ctx->csc.csc_eq = !(shot->op.op & M2M1SHOT_OP_CSC_709) ?
-						SC_CSC_601 : SC_CSC_709;
-	ctx->csc.csc_range = !(shot->op.op & M2M1SHOT_OP_CSC_WIDE) ?
-						SC_CSC_NARROW : SC_CSC_WIDE;
-	ctx->pre_multi = !!(shot->op.op & M2M1SHOT_OP_PREMULTIPLIED_ALPHA);
-
-	return sc_find_scaling_ratio(m21ctx->priv);
-}
-
-static int sc_m2m1shot_prepare_buffer(struct m2m1shot_context *m21ctx,
-			struct m2m1shot_buffer_dma *buf_dma,
-			int plane,
-			enum dma_data_direction dir)
-{
-	int ret;
-
-	ret = m2m1shot_map_dma_buf(m21ctx->m21dev->dev,
-				&buf_dma->plane[plane], dir);
-	if (ret)
-		return ret;
-
-	ret = m2m1shot_dma_addr_map(m21ctx->m21dev->dev, buf_dma, plane, dir);
-	if (ret) {
-		m2m1shot_unmap_dma_buf(m21ctx->m21dev->dev,
-					&buf_dma->plane[plane], dir);
-		return ret;
-	}
-
-	return 0;
-}
-
-static void sc_m2m1shot_finish_buffer(struct m2m1shot_context *m21ctx,
-			struct m2m1shot_buffer_dma *buf_dma,
-			int plane,
-			enum dma_data_direction dir)
-{
-	m2m1shot_dma_addr_unmap(m21ctx->m21dev->dev, buf_dma, plane);
-	m2m1shot_unmap_dma_buf(m21ctx->m21dev->dev,
-				&buf_dma->plane[plane], dir);
-}
-
-static void sc_m2m1shot_get_bufaddr(struct sc_dev *sc,
-			struct m2m1shot_buffer_dma *buf, struct sc_frame *frame)
-{
-	unsigned int pixsize, bytesize;
-
-	pixsize = frame->width * frame->height;
-	bytesize = (pixsize * frame->sc_fmt->bitperpixel[0]) >> 3;
-
-	frame->addr.y = buf->plane[0].dma_addr;
-
-	frame->addr.cb = 0;
-	frame->addr.cr = 0;
-	frame->addr.cbsize = 0;
-	frame->addr.crsize = 0;
-
-	switch (frame->sc_fmt->num_comp) {
-	case 1: /* rgb, yuyv */
-		frame->addr.ysize = bytesize;
-		break;
-	case 2:
-		if (frame->sc_fmt->num_planes == 1) {
-			frame->addr.cb = frame->addr.y + pixsize;
-			frame->addr.ysize = pixsize;
-			frame->addr.cbsize = bytesize - pixsize;
-		} else if (frame->sc_fmt->num_planes == 2) {
-			frame->addr.cb = buf->plane[1].dma_addr;
-
-			frame->addr.ysize =
-				pixsize * frame->sc_fmt->bitperpixel[0] >> 3;
-			frame->addr.cbsize =
-				pixsize * frame->sc_fmt->bitperpixel[1] >> 3;
-		}
-		break;
-	case 3:
-		if (frame->sc_fmt->num_planes == 1) {
-			if (sc_fmt_is_ayv12(frame->sc_fmt->pixelformat)) {
-				unsigned int c_span;
-				c_span = ALIGN(frame->width >> 1, 16);
-				frame->addr.ysize = pixsize;
-				frame->addr.cbsize =
-					c_span * (frame->height >> 1);
-				frame->addr.crsize = frame->addr.cbsize;
-				frame->addr.cb = frame->addr.y + pixsize;
-				frame->addr.cr =
-					frame->addr.cb + frame->addr.cbsize;
-			} else {
-				frame->addr.ysize = pixsize;
-				frame->addr.cbsize = (bytesize - pixsize) / 2;
-				frame->addr.crsize = frame->addr.cbsize;
-				frame->addr.cb = frame->addr.y + pixsize;
-				frame->addr.cr =
-					frame->addr.cb + frame->addr.cbsize;
-			}
-		} else if (frame->sc_fmt->num_planes == 3) {
-			frame->addr.cb = buf->plane[1].dma_addr;
-			frame->addr.cr = buf->plane[2].dma_addr;
-
-			frame->addr.ysize =
-				pixsize * frame->sc_fmt->bitperpixel[0] >> 3;
-			frame->addr.cbsize =
-				pixsize * frame->sc_fmt->bitperpixel[1] >> 3;
-			frame->addr.crsize =
-				pixsize * frame->sc_fmt->bitperpixel[2] >> 3;
-		} else {
-			dev_err(sc->dev, "Please check the num of comp\n");
-		}
-		break;
-	default:
-		break;
-	}
-
-	if (frame->sc_fmt->pixelformat == V4L2_PIX_FMT_YVU420 ||
-			frame->sc_fmt->pixelformat == V4L2_PIX_FMT_YVU420M) {
-		u32 t_cb = frame->addr.cb;
-		frame->addr.cb = frame->addr.cr;
-		frame->addr.cr = t_cb;
-	}
-}
-
-static int sc_m2m1shot_device_run(struct m2m1shot_context *m21ctx,
-				struct m2m1shot_task *task)
-{
-	struct sc_ctx *ctx = m21ctx->priv;
-	struct sc_dev *sc = ctx->sc_dev;
-	struct sc_frame *s_frame, *d_frame;
-
-	if (test_bit(DEV_SUSPEND, &sc->state)) {
-		dev_err(sc->dev, "Scaler is in suspend state\n");
-		return -EAGAIN;
-	}
-
-	/* no aborted state is required for m2m1shot */
-
-	s_frame = &ctx->s_frame;
-	d_frame = &ctx->d_frame;
-
-	sc_m2m1shot_get_bufaddr(sc, &task->dma_buf_out, s_frame);
-	sc_m2m1shot_get_bufaddr(sc, &task->dma_buf_cap, d_frame);
-
-	return sc_add_context_and_run(sc, ctx);
-}
-
-static void sc_m2m1shot_timeout_task(struct m2m1shot_context *m21ctx,
-		struct m2m1shot_task *task)
-{
-	struct sc_ctx *ctx = m21ctx->priv;
-	struct sc_dev *sc = ctx->sc_dev;
-	unsigned long flags;
-
-	sc_hwregs_dump(sc);
-	exynos_sysmmu_show_status(sc->dev);
-
-	sc_hwset_soft_reset(sc);
-
-	clk_disable(sc->aclk);
-	pm_runtime_put(sc->dev);
-
-	spin_lock_irqsave(&sc->ctxlist_lock, flags);
-	sc->current_ctx = NULL;
-	spin_unlock_irqrestore(&sc->ctxlist_lock, flags);
-
-	clear_bit(DEV_RUN, &sc->state);
-	clear_bit(CTX_RUN, &ctx->flags);
-
-	sc_run_next_job(sc);
-}
-
-static const struct m2m1shot_devops sc_m2m1shot_ops = {
-	.init_context = sc_m2m1shot_init_context,
-	.free_context = sc_m2m1shot_free_context,
-	.prepare_format = sc_m2m1shot_prepare_format,
-	.prepare_operation = sc_m2m1shot_prepare_operation,
-	.prepare_buffer = sc_m2m1shot_prepare_buffer,
-	.finish_buffer = sc_m2m1shot_finish_buffer,
-	.device_run = sc_m2m1shot_device_run,
-	.timeout_task = sc_m2m1shot_timeout_task,
-};
 
 static int sc_clk_get(struct sc_dev *sc)
 {
@@ -2628,11 +2163,11 @@ static int sc_clk_get(struct sc_dev *sc)
 				sc->clk_parn = NULL;
 			else
 				return PTR_ERR(sc->clk_parn);
-			dev_info(sc->dev, "'mux_src' clock is not present\n");
+		dev_info(sc->dev, "'mux_src' clock is not present\n");
 		}
 	}
 
-	return 0;
+	return clk_prepare(sc->aclk);
 }
 
 static void sc_clk_put(struct sc_dev *sc)
@@ -2687,24 +2222,13 @@ static int sc_runtime_resume(struct device *dev)
 			return ret;
 		}
 	}
-	if (sc->qosreq_int_level > 0)
-		pm_qos_update_request(&sc->qosreq_int, sc->qosreq_int_level);
-
-	return 0;
-}
-
-static int sc_runtime_suspend(struct device *dev)
-{
-	struct sc_dev *sc = dev_get_drvdata(dev);
-	if (sc->qosreq_int_level > 0)
-		pm_qos_update_request(&sc->qosreq_int, 0);
 	return 0;
 }
 #endif
 
 static const struct dev_pm_ops sc_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(sc_suspend, sc_resume)
-	SET_RUNTIME_PM_OPS(NULL, sc_runtime_resume, sc_runtime_suspend)
+	SET_RUNTIME_PM_OPS(NULL, sc_runtime_resume, NULL)
 };
 
 static int sc_probe(struct platform_device *pdev)
@@ -2712,9 +2236,8 @@ static int sc_probe(struct platform_device *pdev)
 	struct sc_dev *sc;
 	struct resource *res;
 	int ret = 0;
-	int dev_id;
-	size_t ivar;
-	u32 hwver;
+
+	dev_info(&pdev->dev, "++%s\n", __func__);
 
 	sc = devm_kzalloc(&pdev->dev, sizeof(struct sc_dev), GFP_KERNEL);
 	if (!sc) {
@@ -2724,21 +2247,27 @@ static int sc_probe(struct platform_device *pdev)
 
 	sc->dev = &pdev->dev;
 
-	spin_lock_init(&sc->ctxlist_lock);
-	INIT_LIST_HEAD(&sc->context_list);
+	if (pdev->dev.of_node)
+		sc->id = of_alias_get_id(pdev->dev.of_node, "scaler");
+	else
+		sc->id = pdev->id;
+
 	spin_lock_init(&sc->slock);
 	mutex_init(&sc->lock);
-	init_waitqueue_head(&sc->wait);
 
+	/* Get memory resource and map SFR region. */
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	sc->regs = devm_request_and_ioremap(&pdev->dev, res);
-	if (sc->regs == NULL)
+	if (sc->regs == NULL) {
+		dev_err(&pdev->dev, "failed to claim register region\n");
 		return -ENOENT;
+	}
 
+	/* Get IRQ resource and register IRQ handler. */
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
 		dev_err(&pdev->dev, "failed to get IRQ resource\n");
-		return -ENOENT;
+		return -ENXIO;
 	}
 
 	ret = devm_request_irq(&pdev->dev, res->start, sc_irq_handler, 0,
@@ -2755,107 +2284,58 @@ static int sc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	if (pdev->dev.of_node)
-		dev_id = of_alias_get_id(pdev->dev.of_node, "scaler");
-	else
-		dev_id = pdev->id;
+#if defined(CONFIG_VIDEOBUF2_CMA_PHYS)
+	sc->vb2 = &sc_vb2_cma;
+#elif defined(CONFIG_VIDEOBUF2_ION)
+	sc->vb2 = &sc_vb2_ion;
+#endif
 
-	sc->m21dev = m2m1shot_create_device(&pdev->dev, &sc_m2m1shot_ops,
-						"scaler", dev_id, -1);
-	if (IS_ERR(sc->m21dev)) {
-		dev_err(&pdev->dev, "%s: Failed to create m2m1shot_device\n",
-			__func__);
-		return PTR_ERR(sc->m21dev);
-	}
-
-	sc->alloc_ctx = vb2_ion_create_context(sc->dev, SZ_4K,
-		VB2ION_CTX_VMCONTIG | VB2ION_CTX_IOMMU | VB2ION_CTX_UNCACHED);
-
-	if (IS_ERR(sc->alloc_ctx)) {
+	sc->alloc_ctx = sc->vb2->init(sc);
+	if (IS_ERR_OR_NULL(sc->alloc_ctx)) {
 		ret = PTR_ERR(sc->alloc_ctx);
-		goto err_ctx;
+		dev_err(&pdev->dev, "failed to alloc_ctx\n");
+		goto err_clk;
 	}
 
 	platform_set_drvdata(pdev, sc);
 
+	exynos_create_iovmm(&pdev->dev, 3, 3);
+	sc->vb2->resume(sc->alloc_ctx);
+
 	pm_runtime_enable(&pdev->dev);
 
-	ret = pm_runtime_get_sync(&pdev->dev);
+	ret = pm_runtime_get_sync(sc->dev);
+	if (ret < 0)
+		goto err_clk;
+
+	ret = sc_clock_gating(sc, SC_CLK_ON);
 	if (ret < 0) {
-		dev_err(&pdev->dev, "%s: failed to local power on (err %d)\n",
-			__func__, ret);
-		goto err_ver;
+		pm_runtime_put_sync(sc->dev);
+		goto err_clk;
 	}
 
-	ret = clk_prepare_enable(sc->aclk);
-	if (ret) {
-		dev_err(&pdev->dev, "%s: failed to enable clock (err %d)\n",
-			__func__, ret);
-		pm_runtime_put(&pdev->dev);
-		goto err_ver;
-	}
+	sc->ver = sc_hwget_version(sc);
+	dev_info(&pdev->dev, "scaler version is 0x%08x\n", sc->ver);
 
-	sc->version = SCALER_VERSION(2, 0, 0);
+	sc_clock_gating(sc, SC_CLK_OFF);
 
-	hwver = __raw_readl(sc->regs + SCALER_VER);
+	pm_runtime_put_sync(sc->dev);
 
-	/* selects the lowest version number if no version is matched */
-	for (ivar = 0; ivar < ARRAY_SIZE(sc_version_table); ivar++) {
-		sc->version = sc_version_table[ivar][1];
-		if (hwver == sc_version_table[ivar][0])
-			break;
-	}
+	sc->variant = &variant;
 
-	for (ivar = 0; ivar < ARRAY_SIZE(sc_variant); ivar++) {
-		sc->variant = &sc_variant[ivar];
-		if (sc->version < sc_variant[ivar].version)
-			break;
-	}
-
-	clk_disable_unprepare(sc->aclk);
-	pm_runtime_put(&pdev->dev);
-
-	exynos_create_iovmm(&pdev->dev, 3, 3);
-	vb2_ion_attach_iommu(sc->alloc_ctx);
-
-	sc->fence_wq = create_singlethread_workqueue("scaler_fence_work");
-	if (!sc->fence_wq) {
-		dev_err(&pdev->dev, "Failed to create workqueue for fence\n");
-		ret = -ENOMEM;
-		goto err_wq;
-	}
-
-	if (!of_property_read_u32(pdev->dev.of_node, "mscl,int_qos_minlock",
-				(u32 *)&sc->qosreq_int_level)) {
-		if (sc->qosreq_int_level > 0) {
-			pm_qos_add_request(&sc->qosreq_int,
-						PM_QOS_DEVICE_THROUGHPUT, 0);
-			dev_info(&pdev->dev, "INT Min.Lock Freq. = %u\n",
-						sc->qosreq_int_level);
-		}
-	}
-
-	ret = sc_register_m2m_device(sc, dev_id);
+	ret = sc_register_m2m_device(sc);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to register m2m device\n");
-		goto err_m2m;
+		ret = -EPERM;
+		goto err_clk;
 	}
 
-	dev_info(&pdev->dev,
-		"Driver probed successfully(version: %08x)\n", hwver);
+	dev_info(&pdev->dev, "scaler registered successfully\n");
 
 	return 0;
-err_m2m:
-	if (sc->qosreq_int_level > 0)
-		pm_qos_remove_request(&sc->qosreq_int);
 
-	destroy_workqueue(sc->fence_wq);
-err_wq:
-err_ver:
-	vb2_ion_destroy_context(sc->alloc_ctx);
-err_ctx:
-	m2m1shot_destroy_device(sc->m21dev);
-
+err_clk:
+	sc_clk_put(sc);
 	return ret;
 }
 
@@ -2863,21 +2343,12 @@ static int sc_remove(struct platform_device *pdev)
 {
 	struct sc_dev *sc = platform_get_drvdata(pdev);
 
-	destroy_workqueue(sc->fence_wq);
-
-	vb2_ion_detach_iommu(sc->alloc_ctx);
-
-	vb2_ion_destroy_context(sc->alloc_ctx);
+	sc->vb2->suspend(sc->alloc_ctx);
 
 	sc_clk_put(sc);
 
 	if (timer_pending(&sc->wdt.timer))
 		del_timer(&sc->wdt.timer);
-
-	m2m1shot_destroy_device(sc->m21dev);
-
-	if (sc->qosreq_int_level > 0)
-		pm_qos_remove_request(&sc->qosreq_int);
 
 	return 0;
 }

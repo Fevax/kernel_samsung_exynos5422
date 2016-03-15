@@ -46,13 +46,13 @@
 #define HEVC_MAX_DRM_CTX		2
 
 /* Interrupt timeout */
-#define HEVC_INT_TIMEOUT		2000
+#define HEVC_INT_TIMEOUT		20000
 /* Busy wait timeout */
 #define HEVC_BW_TIMEOUT		500
 /* Watchdog interval */
 #define HEVC_WATCHDOG_INTERVAL   1000
 /* After how many executions watchdog should assume lock up */
-#define HEVC_WATCHDOG_CNT        3
+#define HEVC_WATCHDOG_CNT        10
 
 #define HEVC_NO_INSTANCE_SET	-1
 
@@ -266,7 +266,9 @@ struct hevc_dev {
 	int curr_ctx_drm;
 	int fw_status;
 	int num_drm_inst;
+	struct hevc_extra_buf drm_info;
 	struct vb2_alloc_ctx *alloc_ctx_fw;
+	struct vb2_alloc_ctx *alloc_ctx_sh;
 	struct vb2_alloc_ctx *alloc_ctx_drm;
 
 	struct workqueue_struct *sched_wq;
@@ -591,13 +593,11 @@ static inline unsigned int hevc_version(struct hevc_dev *dev)
 #define NUM_OF_ALLOC_CTX(dev)	(NUM_OF_PORT(dev) + 1)
 
 #define FW_HAS_DYNAMIC_DPB(dev)		(dev->fw.date >= 0x131030)
-#define FW_HAS_LAST_DISP_INFO(dev)	(dev->fw.date >= 0x141211)
 
 #define HW_LOCK_CLEAR_MASK		(0xFFFFFFFF)
 
 /* Extra information for Decoder */
 #define	DEC_SET_DYNAMIC_DPB		(1 << 1)
-#define	DEC_SET_LAST_FRAME_INFO		(1 << 2)
 
 struct hevc_fmt {
 	char *name;
@@ -608,17 +608,7 @@ struct hevc_fmt {
 };
 
 int hevc_get_framerate(struct timeval *to, struct timeval *from);
-
-static inline int hevc_clear_hw_bit(struct hevc_ctx *ctx)
-{
-	struct hevc_dev *dev = ctx->dev;
-	int ret = -1;
-
-	if (!atomic_read(&dev->watchdog_run))
-		ret = test_and_clear_bit(ctx->num, &dev->hw_lock);
-
-	return ret;
-}
+inline int hevc_clear_hw_bit(struct hevc_ctx *ctx);
 
 #ifdef CONFIG_ION_EXYNOS
 extern struct ion_device *ion_exynos;

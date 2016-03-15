@@ -169,7 +169,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_D_OPT_LF_CTRL_MASK		0x3
 #define S5P_FIMV_D_OPT_TILE_MODE_SHIFT		0
 #define S5P_FIMV_D_OPT_DYNAMIC_DPB_SET_SHIFT	3
-#define S5P_FIMV_D_OPT_NOT_CODED_SET_SHIFT	4
 
 #define S5P_FIMV_D_DISPLAY_DELAY		0xF0B8
 
@@ -186,7 +185,7 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_D_MIN_SECOND_PLANE_DPB_SIZE                    0xF0F8
 #define S5P_FIMV_D_MIN_THIRD_PLANE_DPB_SIZE                     0xF0FC
 #define S5P_FIMV_D_MIN_NUM_MV                                   0xF100
-#define S5P_FIMV_D_MVC_NUM_VIEWS                                0xF104
+#define S5P_FIMV_D_MVC_VIEW_ID                                  0xF104
 
 /* Buffers */
 #define S5P_FIMV_D_NUM_DPB                                      0xF130
@@ -277,9 +276,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_D_METADATA_ADDR_VUI                            0xF6C8
 #define S5P_FIMV_D_METADATA_SIZE_VUI                            0xF6CC
 
-#define S5P_FIMV_D_MVC_VIEW_ID			                0xF6D8
-#define S5P_FIMV_D_MVC_VIEW_ID_DISP_MASK	                0xFFFF
-
 #define S5P_FIMV_D_FRAME_PACK_SEI_AVAIL                         0xF6DC
 #define S5P_FIMV_D_FRAME_PACK_ARRGMENT_ID                       0xF6E0
 #define S5P_FIMV_D_FRAME_PACK_SEI_INFO                          0xF6E4
@@ -303,7 +299,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_DEC_STATUS_DECODING_DISPLAY		1
 #define S5P_FIMV_DEC_STATUS_DISPLAY_ONLY		2
 #define S5P_FIMV_DEC_STATUS_DECODING_EMPTY		3
-#define S5P_FIMV_DEC_STATUS_LAST_DISP			4	/* Hooking value */
 #define S5P_FIMV_DEC_STATUS_DECODING_STATUS_MASK	7
 #define S5P_FIMV_DEC_STATUS_PROGRESSIVE			(0<<3)
 #define S5P_FIMV_DEC_STATUS_INTERLACE			(1<<3)
@@ -324,8 +319,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_DISPLAY_FRAME_I		1
 #define S5P_FIMV_DISPLAY_FRAME_P		2
 #define S5P_FIMV_DISPLAY_FRAME_B		3
-#define S5P_FIMV_DISPLAY_LAST_INFO_MASK		0x1
-#define S5P_FIMV_DISPLAY_LAST_INFO_SHIFT	11
 #define S5P_FIMV_SHARED_CROP_INFO_H		0x0020
 #define S5P_FIMV_SHARED_CROP_LEFT_MASK		0xFFFF
 #define S5P_FIMV_SHARED_CROP_LEFT_SHIFT		0
@@ -377,7 +370,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_ENC_ADV_TIGHT_CBR		0
 #define S5P_FIMV_ENC_ADV_LOOSE_CBR		1
 #define S5P_FIMV_ENC_ADV_CAM_CBR		2
-#define S5P_FIMV_ENC_ADV_I_LIMIT_CBR		3
 
 #define S5P_FIMV_E_MB_RC_CONFIG			0xF7A8
 #define S5P_FIMV_E_PADDING_CTRL			0xF7AC
@@ -424,7 +416,6 @@ static inline unsigned int r2h_bits(int cmd)
 
 #define S5P_FIMV_E_METADATA_BUFFER_ADDR		0xFA40
 #define S5P_FIMV_E_METADATA_BUFFER_SIZE		0xFA44
-#define S5P_FIMV_E_GOP_CONFIG2			0xFA5C
 #define S5P_FIMV_E_ENCODED_SOURCE_FIRST_ADDR	0xFA70
 #define S5P_FIMV_E_ENCODED_SOURCE_SECOND_ADDR	0xFA74
 #define S5P_FIMV_E_ENCODED_SOURCE_THIRD_ADDR	0xFA78
@@ -485,14 +476,6 @@ static inline unsigned int r2h_bits(int cmd)
 #define S5P_FIMV_E_H264_HIERARCHICAL_QP_LAYER6	0xFBC8
 
 #define S5P_FIMV_E_H264_FRAME_PACKING_SEI_INFO	0xFC4C
-
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER0	0xFD18
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER1	0xFD1C
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER2	0xFD20
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER3	0xFD24
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER4	0xFD28
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER5	0xFD2C
-#define S5P_FIMV_E_H264_HIERARCHICAL_BIT_RATE_LAYER6	0xFD30
 
 #define S5P_FIMV_E_MVC_FRAME_QP_VIEW1		0xFD40
 #define S5P_FIMV_E_MVC_RC_FRAME_RATE_VIEW1	0xFD44

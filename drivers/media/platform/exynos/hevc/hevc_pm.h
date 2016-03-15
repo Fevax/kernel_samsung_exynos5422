@@ -19,8 +19,7 @@ void hevc_final_pm(struct hevc_dev *dev);
 int hevc_clock_on(void);
 void hevc_clock_off(void);
 int hevc_power_on(void);
-int hevc_power_off(struct hevc_dev *dev);
-void hevc_set_power_flag(void);
+int hevc_power_off(void);
 int hevc_get_clk_ref_cnt(void);
 int hevc_set_clock_parent(struct hevc_dev *dev);
 

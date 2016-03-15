@@ -54,9 +54,13 @@ static struct proc_dir_entry *hevc_proc_entry;
 #define HEVC_PROC_DRM_INSTANCE_NUMBER	"drm_instance_number"
 #define HEVC_PROC_FW_STATUS		"fw_status"
 
-#endif
+#define HEVC_DRM_MAGIC_SIZE	0x10
+#define HEVC_DRM_MAGIC_CHUNK0	0x13cdbf16
+#define HEVC_DRM_MAGIC_CHUNK1	0x8b803342
+#define HEVC_DRM_MAGIC_CHUNK2	0x5e87f4f5
+#define HEVC_DRM_MAGIC_CHUNK3	0x3bd05317
 
-#define HEVC_SFR_AREA_COUNT	8
+#define HEVC_SFR_AREA_COUNT	11
 void hevc_dump_regs(struct hevc_dev *dev)
 {
 	int i;
@@ -67,14 +71,14 @@ void hevc_dump_regs(struct hevc_dev *dev)
 		{ 0x6000, 0xA0 },
 		{ 0x7000, 0x220 },
 		{ 0x8000, 0x764 },
-		{ 0xA000, 0x20C },
-		{ 0xF000, 0x6FF },
+		{ 0x9000, 0xA04 },
+		{ 0xA000, 0x200 },
+		{ 0xB000, 0x40 },
+		{ 0xD000, 0x70 },
+		{ 0xF000, 0x5FF },
 	};
 
 	pr_err("dumping registers (SFR base = %p)\n", dev->regs_base);
-
-	/* Enable all FW clock gating */
-	writel(0xFFFFFFFF, dev->regs_base + 0x1060);
 
 	for (i = 0; i < HEVC_SFR_AREA_COUNT; i++) {
 		printk("[%04X .. %04X]\n", addr[i][0], addr[i][0] + addr[i][1]);
@@ -84,18 +88,28 @@ void hevc_dump_regs(struct hevc_dev *dev)
 	}
 }
 
-
-int exynos_hevc_sysmmu_fault_handler(struct iommu_domain *iodmn, struct device *dev,
-		unsigned long addr, int id, void *param)
+static int check_magic(unsigned char *addr)
 {
-	struct hevc_dev *m_dev;
-
-	m_dev = (struct hevc_dev *)param;
-
-	hevc_dump_regs(m_dev);
-
-	return 0;
+	if (((u32)*(u32 *)(addr) == HEVC_DRM_MAGIC_CHUNK0) &&
+	    ((u32)*(u32 *)(addr + 0x4) == HEVC_DRM_MAGIC_CHUNK1) &&
+	    ((u32)*(u32 *)(addr + 0x8) == HEVC_DRM_MAGIC_CHUNK2) &&
+	    ((u32)*(u32 *)(addr + 0xC) == HEVC_DRM_MAGIC_CHUNK3))
+		return 0;
+	else if (((u32)*(u32 *)(addr + 0x10) == HEVC_DRM_MAGIC_CHUNK0) &&
+	    ((u32)*(u32 *)(addr + 0x14) == HEVC_DRM_MAGIC_CHUNK1) &&
+	    ((u32)*(u32 *)(addr + 0x18) == HEVC_DRM_MAGIC_CHUNK2) &&
+	    ((u32)*(u32 *)(addr + 0x1C) == HEVC_DRM_MAGIC_CHUNK3))
+		return 0x10;
+	else
+		return -1;
 }
+
+static inline void clear_magic(unsigned char *addr)
+{
+	memset((void *)addr, 0x00, HEVC_DRM_MAGIC_SIZE);
+}
+#endif
+
 /*
  * A framerate table determines framerate by the interval(us) of each frame.
  * Framerate is not accurate, just rough value to seperate overload section.
@@ -151,6 +165,17 @@ void hevc_sched_worker(struct work_struct *work)
 	dev = container_of(work, struct hevc_dev, sched_work);
 
 	hevc_try_run(dev);
+}
+
+inline int hevc_clear_hw_bit(struct hevc_ctx *ctx)
+{
+	struct hevc_dev *dev = ctx->dev;
+	int ret = -1;
+
+	if (!atomic_read(&dev->watchdog_run))
+		ret = test_and_clear_bit(ctx->num, &dev->hw_lock);
+
+	return ret;
 }
 
 /* Helper functions for interrupt processing */
@@ -495,8 +520,6 @@ static void hevc_handle_frame_copy_timestamp(struct hevc_ctx *ctx)
 
 }
 
-#define on_res_change(ctx)	((ctx)->state >= HEVCINST_RES_CHANGE_INIT &&	\
-				 (ctx)->state <= HEVCINST_RES_CHANGE_END)
 static void hevc_handle_frame_new(struct hevc_ctx *ctx, unsigned int err)
 {
 	struct hevc_dec *dec;
@@ -506,7 +529,7 @@ static void hevc_handle_frame_new(struct hevc_ctx *ctx, unsigned int err)
 	dma_addr_t dspl_y_addr;
 	unsigned int index;
 	unsigned int frame_type;
-	unsigned int dst_frame_status, last_frame_status;
+	unsigned int dst_frame_status;
 	struct list_head *dst_queue_addr;
 	unsigned int prev_flag, released_flag = 0;
 	int i;
@@ -531,13 +554,7 @@ static void hevc_handle_frame_new(struct hevc_ctx *ctx, unsigned int err)
 	raw = &ctx->raw_buf;
 	frame_type = hevc_get_disp_frame_type();
 
-	if (FW_HAS_LAST_DISP_INFO(dev))
-		last_frame_status = hevc_get_last_disp_info();
-	else
-		last_frame_status = 0;
-
 	hevc_debug(2, "frame_type : %d\n", frame_type);
-	hevc_debug(2, "last_frame_status : %d\n", last_frame_status);
 
 	ctx->sequence++;
 
@@ -659,14 +676,6 @@ static void hevc_handle_frame_new(struct hevc_ctx *ctx, unsigned int err)
 					V4L2_CID_MPEG_MFC51_VIDEO_FRAME_TAG,
 					dec->stored_tag);
 				dec->y_addr_for_pb = 0;
-			}
-
-			if (last_frame_status &&
-					!on_res_change(ctx)) {
-				call_cop(ctx, get_buf_update_val, ctx,
-					&ctx->dst_ctrls[index],
-					V4L2_CID_MPEG_MFC51_VIDEO_DISPLAY_STATUS,
-					HEVC_DEC_STATUS_LAST_DISP);
 			}
 
 			if (!dec->is_dts_mode) {
@@ -1107,11 +1116,6 @@ static irqreturn_t hevc_irq(int irq, void *priv)
 		goto irq_cleanup_hw;
 	}
 
-	if (atomic_read(&dev->pm.power) == 0) {
-		hevc_err("no hevc power on\n");
-		goto irq_poweron_err;
-	}
-
 	/* Reset the timeout watchdog */
 	atomic_set(&dev->watchdog_cnt, 0);
 	/* Get the reason of interrupt and the error code */
@@ -1189,7 +1193,6 @@ static irqreturn_t hevc_irq(int irq, void *priv)
 
 			dec->internal_dpb = 0;
 			hevc_dec_store_crop_info(ctx);
-			dec->mv_count = hevc_get_mv_count();
 			if (ctx->img_width == 0 || ctx->img_height == 0)
 				ctx->state = HEVCINST_ERROR;
 			else
@@ -1334,7 +1337,6 @@ irq_cleanup_hw:
 	if (dev)
 		queue_work(dev->sched_wq, &dev->sched_work);
 
-irq_poweron_err:
 	hevc_debug(2, "via irq_cleanup_hw\n");
 	return IRQ_HANDLED;
 }
@@ -1346,6 +1348,9 @@ static int hevc_open(struct file *file)
 	struct hevc_dev *dev = video_drvdata(file);
 	int ret = 0;
 	enum hevc_node_type node;
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+	int magic_offset;
+#endif
 
 	hevc_info("hevc driver open called\n");
 
@@ -1411,6 +1416,37 @@ static int hevc_open(struct file *file)
 		goto err_ctx_ctrls;
 	}
 
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+	/* Multi-instance is supported for same DRM type */
+	magic_offset = check_magic(dev->drm_info.virt);
+	if (magic_offset >= 0) {
+		clear_magic(dev->drm_info.virt + magic_offset);
+		if (dev->num_drm_inst < HEVC_MAX_DRM_CTX) {
+			hevc_info("DRM instance opened\n");
+
+			dev->num_drm_inst++;
+			ctx->is_drm = 1;
+		} else {
+			hevc_err("Too many instance are opened for DRM\n");
+			ret = -EINVAL;
+			goto err_drm_start;
+		}
+		if (dev->num_inst != dev->num_drm_inst) {
+			hevc_err("Can not open DRM instance\n");
+			hevc_err("Non-DRM instance is already opened.\n");
+			ret = -EINVAL;
+			goto err_drm_inst;
+		}
+	} else {
+		if (dev->num_drm_inst) {
+			hevc_err("Can not open non-DRM instance\n");
+			hevc_err("DRM instance is already opened.\n");
+			ret = -EINVAL;
+			goto err_drm_start;
+		}
+	}
+#endif
+
 	/* Load firmware if this is the first instance */
 	if (dev->num_inst == 1) {
 		dev->watchdog_timer.expires = jiffies +
@@ -1440,10 +1476,7 @@ static int hevc_open(struct file *file)
 		}
 #else
 		/* Load the FW */
-		if (!dev->fw_status) {
-			ret = hevc_alloc_firmware(dev);
-			dev->fw_status = 1;
-		}
+		ret = hevc_alloc_firmware(dev);
 		if (ret)
 			goto err_fw_alloc;
 		ret = hevc_load_firmware(dev);
@@ -1484,7 +1517,7 @@ static int hevc_open(struct file *file)
 
 	/* Deinit when failure occured */
 err_hw_init:
-	hevc_power_off(dev);
+	hevc_power_off();
 
 err_pwr_enable:
 	hevc_release_dev_context_buffer(dev);
@@ -1495,9 +1528,13 @@ err_fw_load:
 
 err_fw_alloc:
 	del_timer_sync(&dev->watchdog_timer);
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+err_drm_inst:
 	if (ctx->is_drm)
 		dev->num_drm_inst--;
 
+err_drm_start:
+#endif
 	call_cop(ctx, cleanup_ctx_ctrls, ctx);
 
 err_ctx_ctrls:
@@ -1517,6 +1554,9 @@ err_ctx_num:
 err_ctx_alloc:
 	dev->num_inst--;
 
+#ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
+/* err_drm_playback: // unused label */
+#endif
 err_node_type:
 	mutex_unlock(&dev->hevc_mutex);
 err_no_device:
@@ -1625,11 +1665,12 @@ static int hevc_release(struct file *file)
 		flush_workqueue(dev->sched_wq);
 
 		hevc_info("power off\n");
-		hevc_power_off(dev);
+		hevc_power_off();
 
 		/* reset <-> F/W release */
-
+		hevc_release_firmware(dev);
 		hevc_release_dev_context_buffer(dev);
+		dev->fw_status = 0;
 
 
 	}
@@ -1739,20 +1780,6 @@ static int parse_hevc_qos_platdata(struct device_node *np, char *node_name,
 
 	return ret;
 }
-
-#if defined(CONFIG_EXYNOS5430_HD)
-static int mif_for_hd[QOS_STEP_NUM] =
-	/* For HEVC */
-	{ 127000, 127000, 211000, 413000 };
-
-static void parse_hevc_qos_mif_update(struct hevc_dev *dev, int num_steps)
-{
-	int i;
-
-	for (i = 0; i < num_steps; i++)
-		g_hevc_qos_table[i].freq_mif = mif_for_hd[i];
-}
-#endif
 #endif
 
 static void hevc_parse_dt(struct device_node *np, struct hevc_dev *hevc)
@@ -1772,9 +1799,6 @@ static void hevc_parse_dt(struct device_node *np, struct hevc_dev *hevc)
 	parse_hevc_qos_platdata(np, "hevc_qos_variant_1", &g_hevc_qos_table[1]);
 	parse_hevc_qos_platdata(np, "hevc_qos_variant_2", &g_hevc_qos_table[2]);
 	parse_hevc_qos_platdata(np, "hevc_qos_variant_3", &g_hevc_qos_table[3]);
-#if defined(CONFIG_EXYNOS5430_HD)
-	parse_hevc_qos_mif_update(hevc, pdata->num_qos_steps);
-#endif
 #endif
 }
 
@@ -1958,6 +1982,31 @@ static int hevc_probe(struct platform_device *pdev)
 		goto alloc_ctx_fw_fail;
 	}
 
+	dev->alloc_ctx_sh = (struct vb2_alloc_ctx *)
+		vb2_ion_create_context(&pdev->dev,
+			SZ_4K,
+			VB2ION_CTX_UNCACHED | VB2ION_CTX_DRM_MFCSH |
+			VB2ION_CTX_KVA_STATIC);
+	if (IS_ERR(dev->alloc_ctx_sh)) {
+		hevc_err("failed to prepare shared allocation context\n");
+		ret = PTR_ERR(dev->alloc_ctx_sh);
+		goto alloc_ctx_sh_fail;
+	}
+
+	dev->drm_info.alloc = hevc_mem_alloc_priv(dev->alloc_ctx_sh,
+						PAGE_SIZE);
+	if (IS_ERR(dev->drm_info.alloc)) {
+		hevc_err("failed to allocate shared region\n");
+		ret = PTR_ERR(dev->drm_info.alloc);
+		goto shared_alloc_fail;
+	}
+	dev->drm_info.virt = hevc_mem_vaddr_priv(dev->drm_info.alloc);
+	if (!dev->drm_info.virt) {
+		hevc_err("failed to get vaddr for shared region\n");
+		ret = -ENOMEM;
+		goto shared_vaddr_fail;
+	}
+
 	dev->alloc_ctx_drm = (struct vb2_alloc_ctx *)
 		vb2_ion_create_context(&pdev->dev,
 			SZ_4K,
@@ -1984,9 +2033,6 @@ static int hevc_probe(struct platform_device *pdev)
 		atomic_set(&dev->qos_req_cnt[i], 0);
 #endif
 
-	iovmm_set_fault_handler(dev->device,
-		exynos_hevc_sysmmu_fault_handler, dev);
-
 	pr_debug("%s--\n", __func__);
 	return 0;
 
@@ -1996,7 +2042,12 @@ err_qos_cnt:
 #endif
 #ifdef CONFIG_EXYNOS_CONTENT_PATH_PROTECTION
 	vb2_ion_destroy_context(dev->alloc_ctx_drm);
+shared_vaddr_fail:
+	hevc_mem_free_priv(dev->drm_info.alloc);
+shared_alloc_fail:
 alloc_ctx_drm_fail:
+	vb2_ion_destroy_context(dev->alloc_ctx_sh);
+alloc_ctx_sh_fail:
 	vb2_ion_destroy_context(dev->alloc_ctx_fw);
 alloc_ctx_fw_fail:
 	destroy_workqueue(dev->sched_wq);
@@ -2051,6 +2102,8 @@ static int hevc_remove(struct platform_device *pdev)
 	remove_proc_entry(HEVC_PROC_INSTANCE_NUMBER, hevc_proc_entry);
 	remove_proc_entry(HEVC_PROC_ROOT, NULL);
 	vb2_ion_destroy_context(dev->alloc_ctx_drm);
+	hevc_mem_free_priv(dev->drm_info.alloc);
+	vb2_ion_destroy_context(dev->alloc_ctx_sh);
 	vb2_ion_destroy_context(dev->alloc_ctx_fw);
 #endif
 #ifdef CONFIG_ION_EXYNOS
@@ -2165,7 +2218,7 @@ struct hevc_buf_size_v6 hevc_buf_size_v6 = {
 };
 
 struct hevc_buf_size buf_size_v1 = {
-	.firmware_code	= PAGE_ALIGN(0x100000),	/* 1MB */
+	.firmware_code	= PAGE_ALIGN(0x300000),	/* 1MB */
 	.cpb_buf	= PAGE_ALIGN(0x100000),	/* 3MB */
 	.buf		= &hevc_buf_size_v6,
 };

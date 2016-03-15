@@ -14,8 +14,6 @@
 #include "fimc-is-core.h"
 #include "fimc-is-dvfs.h"
 
-extern struct pm_qos_request exynos_isp_qos_cpu_min;
-extern struct pm_qos_request exynos_isp_qos_cpu_max;
 extern struct pm_qos_request exynos_isp_qos_int;
 extern struct pm_qos_request exynos_isp_qos_mem;
 extern struct pm_qos_request exynos_isp_qos_cam;
@@ -25,11 +23,8 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_CAPTURE);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_CAMCORDING);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_PREVIEW);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_HIGH_SPEED_FPS);
-DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD_BNS_OFF);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD);
-DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_WHD);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_UHD);
-DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_FHD_BNS_OFF);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_FHD);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_WHD);
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_UHD);
@@ -59,25 +54,13 @@ static struct fimc_is_dvfs_scenario static_scenarios[] = {
 		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_HIGH_SPEED_FPS),
 		.check_func		= GET_DVFS_CHK_FUNC(FIMC_IS_SN_HIGH_SPEED_FPS),
 	}, {
-		.scenario_id		= FIMC_IS_SN_REAR_CAMCORDING_FHD_BNS_OFF,
-		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_REAR_CAMCORDING_FHD_BNS_OFF),
-		.check_func		= GET_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD_BNS_OFF),
-	}, {
 		.scenario_id		= FIMC_IS_SN_REAR_CAMCORDING_FHD,
 		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_REAR_CAMCORDING_FHD),
 		.check_func		= GET_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD),
 	}, {
-		.scenario_id		= FIMC_IS_SN_REAR_CAMCORDING_WHD,
-		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_REAR_CAMCORDING_WHD),
-		.check_func		= GET_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_WHD),
-	}, {
 		.scenario_id		= FIMC_IS_SN_REAR_CAMCORDING_UHD,
 		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_REAR_CAMCORDING_UHD),
 		.check_func		= GET_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_UHD),
-	}, {
-		.scenario_id		= FIMC_IS_SN_REAR_PREVIEW_FHD_BNS_OFF,
-		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_REAR_PREVIEW_FHD_BNS_OFF),
-		.check_func		= GET_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_FHD_BNS_OFF),
 	}, {
 		.scenario_id		= FIMC_IS_SN_REAR_PREVIEW_FHD,
 		.scenario_nm		= DVFS_SN_STR(FIMC_IS_SN_REAR_PREVIEW_FHD),
@@ -152,8 +135,7 @@ static struct fimc_is_dvfs_scenario dynamic_scenarios[] = {
 };
 #endif
 
-static inline int fimc_is_get_open_sensor_cnt(struct fimc_is_core *core)
-{
+static inline int fimc_is_get_open_sensor_cnt(struct fimc_is_core *core) {
 	int i, sensor_cnt = 0;
 
 	for (i = 0; i < FIMC_IS_MAX_NODES; i++)
@@ -163,29 +145,10 @@ static inline int fimc_is_get_open_sensor_cnt(struct fimc_is_core *core)
 	return sensor_cnt;
 }
 
-static inline u32 fimc_is_chk_req(struct fimc_is_frame *frame, enum fimc_is_video_dev_num vid)
-{
-	int i;
-	struct camera2_node *node;
-	u32 ret = 0;
-
-	if (frame == NULL)
-		return ret;
-
-	for (i = 0; i < CAPTURE_NODE_MAX; i++) {
-		node = &frame->shot_ext->node_group.capture[i];
-		if (node->vid == vid) {
-			ret = node->request;
-			break;
-		}
-	}
-
-	return ret;
-}
-
 /* dual capture */
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_DUAL_CAPTURE)
 {
+
 	struct fimc_is_core *core;
 	int sensor_cnt = 0;
 	core = (struct fimc_is_core *)device->interface->core;
@@ -240,23 +203,6 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_HIGH_SPEED_FPS)
 		return 0;
 }
 
-/* rear camcording FHD with BNS off */
-DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD_BNS_OFF)
-{
-	u32 mask = (device->setfile & FIMC_IS_SETFILE_MASK);
-	bool setfile_flag = (mask == ISS_SUB_SCENARIO_VIDEO) ||
-			(mask == ISS_SUB_SCENARIO_VIDEO_WDR);
-
-	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
-			(fimc_is_sensor_g_framerate(device->sensor) <= 30) &&
-			(device->chain3_width * device->chain3_height <= SIZE_FHD) &&
-			(fimc_is_sensor_g_bns_ratio(device->sensor) <= 1000) &&
-			setfile_flag)
-		return 1;
-	else
-		return 0;
-}
-
 /* rear camcording FHD*/
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD)
 {
@@ -267,24 +213,6 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_FHD)
 	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
 			(fimc_is_sensor_g_framerate(device->sensor) <= 30) &&
 			(device->chain3_width * device->chain3_height <= SIZE_FHD) &&
-			(fimc_is_sensor_g_bns_ratio(device->sensor) > 1000) &&
-			setfile_flag)
-		return 1;
-	else
-		return 0;
-}
-
-/* rear camcording WHD*/
-DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_WHD)
-{
-	u32 mask = (device->setfile & FIMC_IS_SETFILE_MASK);
-	bool setfile_flag = (mask == ISS_SUB_SCENARIO_VIDEO) ||
-			(mask == ISS_SUB_SCENARIO_VIDEO_WDR);
-
-	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
-			(fimc_is_sensor_g_framerate(device->sensor) <= 30) &&
-			(device->chain3_width * device->chain3_height > SIZE_FHD) &&
-			(device->chain3_width * device->chain3_height <= SIZE_WHD) &&
 			setfile_flag)
 		return 1;
 	else
@@ -300,24 +228,9 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAMCORDING_UHD)
 
 	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
 			(fimc_is_sensor_g_framerate(device->sensor) <= 30) &&
-			(device->chain3_width * device->chain3_height > SIZE_WHD) &&
+			(device->chain3_width * device->chain3_height > SIZE_FHD) &&
 			(device->chain3_width * device->chain3_height <= SIZE_UHD) &&
 			setfile_flag)
-		return 1;
-	else
-		return 0;
-}
-
-/* rear preview FHD with BNS off */
-DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_FHD_BNS_OFF)
-{
-	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
-			(fimc_is_sensor_g_framerate(device->sensor) <= 30) &&
-			(device->chain3_width * device->chain3_height <= SIZE_FHD) &&
-			(fimc_is_sensor_g_bns_ratio(device->sensor) <= 1000) &&
-			((device->setfile & FIMC_IS_SETFILE_MASK) \
-			 != ISS_SUB_SCENARIO_VIDEO))
-
 		return 1;
 	else
 		return 0;
@@ -329,7 +242,6 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_PREVIEW_FHD)
 	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
 			(fimc_is_sensor_g_framerate(device->sensor) <= 30) &&
 			(device->chain3_width * device->chain3_height <= SIZE_FHD) &&
-			(fimc_is_sensor_g_bns_ratio(device->sensor) > 1000) &&
 			((device->setfile & FIMC_IS_SETFILE_MASK) \
 			 != ISS_SUB_SCENARIO_VIDEO))
 
@@ -404,8 +316,7 @@ DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_FRONT_PREVIEW)
 DECLARE_DVFS_CHK_FUNC(FIMC_IS_SN_REAR_CAPTURE)
 {
 	if ((device->sensor->pdev->id == SENSOR_POSITION_REAR) &&
-			((test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state)) ||
-			fimc_is_chk_req(frame, FIMC_IS_VIDEO_SCC_NUM)))
+			(test_bit(FIMC_IS_ISCHAIN_REPROCESSING, &device->state)))
 		return 1;
 	else
 		return 0;
@@ -445,8 +356,6 @@ int fimc_is_dvfs_init(struct fimc_is_resourcemgr *resourcemgr)
 
 	BUG_ON(!resourcemgr);
 
-	resourcemgr->dvfs_ctrl.cur_cpu_min_qos = 0;
-	resourcemgr->dvfs_ctrl.cur_cpu_max_qos = 0;
 	resourcemgr->dvfs_ctrl.cur_int_qos = 0;
 	resourcemgr->dvfs_ctrl.cur_mif_qos = 0;
 	resourcemgr->dvfs_ctrl.cur_cam_qos = 0;
@@ -494,7 +403,7 @@ int fimc_is_dvfs_init(struct fimc_is_resourcemgr *resourcemgr)
 	return 0;
 }
 
-int fimc_is_dvfs_sel_scenario(u32 type, struct fimc_is_device_ischain *device, struct fimc_is_frame *frame)
+int fimc_is_dvfs_sel_scenario(u32 type, struct fimc_is_device_ischain *device)
 {
 	struct fimc_is_dvfs_ctrl *dvfs_ctrl;
 	struct fimc_is_dvfs_scenario_ctrl *static_ctrl, *dynamic_ctrl;
@@ -562,7 +471,7 @@ int fimc_is_dvfs_sel_scenario(u32 type, struct fimc_is_device_ischain *device, s
 			continue;
 		}
 
-		if ((scenarios[i].check_func(device, frame)) > 0) {
+		if ((scenarios[i].check_func(device)) > 0) {
 			scenario_id = scenarios[i].scenario_id;
 
 			if (type == FIMC_IS_DYNAMIC_SN) {
@@ -662,7 +571,7 @@ exit:
 int fimc_is_set_dvfs(struct fimc_is_device_ischain *device, u32 scenario_id)
 {
 	int ret = 0;
-	int cpu_min_qos, cpu_max_qos, int_qos, mif_qos, i2c_qos, cam_qos, disp_qos, pwm_qos = 0;
+	int int_qos, mif_qos, i2c_qos, cam_qos, disp_qos, pwm_qos = 0;
 	int refcount;
 	struct fimc_is_core *core;
 	struct fimc_is_resourcemgr *resourcemgr;
@@ -683,8 +592,6 @@ int fimc_is_set_dvfs(struct fimc_is_device_ischain *device, u32 scenario_id)
 		goto exit;
 	}
 
-	cpu_min_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_CPU_MIN, scenario_id);
-	cpu_max_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_CPU_MAX, scenario_id);
 	int_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_INT, scenario_id);
 	mif_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_MIF, scenario_id);
 	i2c_qos = fimc_is_get_qos(core, FIMC_IS_DVFS_I2C, scenario_id);
@@ -696,16 +603,6 @@ int fimc_is_set_dvfs(struct fimc_is_device_ischain *device, u32 scenario_id)
 	|| (cam_qos < 0) || (disp_qos < 0) || (pwm_qos < 0)) {
 		err("getting qos value is failed!!\n");
 		return -EINVAL;
-	}
-
-	if (dvfs_ctrl->cur_cpu_min_qos != cpu_min_qos) {
-		pm_qos_update_request(&exynos_isp_qos_cpu_min, cpu_min_qos);
-		dvfs_ctrl->cur_cpu_min_qos = cpu_min_qos;
-	}
-
-	if (dvfs_ctrl->cur_cpu_max_qos != cpu_max_qos) {
-		pm_qos_update_request(&exynos_isp_qos_cpu_max, cpu_max_qos);
-		dvfs_ctrl->cur_cpu_max_qos = cpu_max_qos;
 	}
 
 	/* check current qos */
@@ -754,9 +651,9 @@ int fimc_is_set_dvfs(struct fimc_is_device_ischain *device, u32 scenario_id)
 		dvfs_ctrl->cur_disp_qos = disp_qos;
 	}
 
-	dbg("[RSC:%d]: New QoS [INT(%d), MIF(%d), CAM(%d), DISP(%d), I2C(%d), PWM(%d) CPU(%d/%d)]\n",
+	dbg("[RSC:%d]: New QoS [INT(%d), MIF(%d), CAM(%d), DISP(%d), I2C(%d), PWM(%d)]\n",
 			device->instance, int_qos, mif_qos,
-			cam_qos, disp_qos, i2c_qos, pwm_qos, cpu_min_qos, cpu_max_qos);
+			cam_qos, disp_qos, i2c_qos, pwm_qos);
 exit:
 	return ret;
 }

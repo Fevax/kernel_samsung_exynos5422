@@ -15,6 +15,7 @@
 #include <mach/exynos-fimc-is-sensor.h>
 #include <linux/interrupt.h>
 #include "fimc-is-video.h"
+#include "fimc-is-core.h"
 
 struct fimc_is_video_ctx;
 
@@ -46,6 +47,7 @@ struct fimc_is_device_companion {
 
 	struct exynos_platform_fimc_is_sensor		*pdata;
 	void						*private_data;
+	struct fimc_is_core                             *core;
 	wait_queue_head_t				init_wait_queue;
 	int						companion_status;
 };
@@ -53,7 +55,5 @@ struct fimc_is_device_companion {
 int fimc_is_companion_open(struct fimc_is_device_companion *device);
 int fimc_is_companion_close(struct fimc_is_device_companion *device);
 int fimc_is_companion_wait(struct fimc_is_device_companion *device);
-int fimc_is_companion_runtime_suspend(struct device *dev);
-int fimc_is_companion_runtime_resume(struct device *dev);
 
 #endif

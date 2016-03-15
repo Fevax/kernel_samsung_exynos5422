@@ -13,7 +13,6 @@
 
 #include <linux/io.h>
 #include <linux/delay.h>
-#include <linux/ktime.h>
 #include <mach/map.h>
 #include "gsc-core.h"
 
@@ -37,10 +36,10 @@ void gsc_hw_set_pp_index_init(struct gsc_dev *dev)
 
 void gsc_hw_set_lookup_table(struct gsc_dev *dev)
 {
-	writel(0xFFFFFFFF, dev->regs + GSC_IN_QOS_LUT07_00);
-	writel(0xFFFFFFFF, dev->regs + GSC_IN_QOS_LUT15_08);
-	writel(0xA9876543, dev->regs + GSC_OUT_QOS_LUT07_00);
-	writel(0xFFFFEDCB, dev->regs + GSC_OUT_QOS_LUT15_08);
+	writel(0xCCCCCCCC, dev->regs + GSC_IN_QOS_LUT07_00);
+	writel(0xCCCCCCCC, dev->regs + GSC_IN_QOS_LUT15_08);
+	writel(0xA9876543, dev->regs + GSC_IN_QOS_LUT07_00);
+	writel(0xFFFFEDCB, dev->regs + GSC_IN_QOS_LUT15_08);
 }
 
 void gsc_hw_set_smart_if_pix_num(struct gsc_ctx *ctx)
@@ -65,40 +64,36 @@ void gsc_hw_set_smart_if_con(struct gsc_dev *dev, bool enable)
 	writel(cfg, dev->regs + GSC_SMART_IF_CON);
 }
 
-void gsc_hw_set_buscon_realtime(struct gsc_dev *dev)
-{
-	u32 cfg = readl(dev->regs + GSC_BUSCON);
-	cfg |= GSC_BUSCON_REAL_TIME_ACCESS_EN;
-	writel(cfg, dev->regs + GSC_BUSCON);
-}
-
-void gsc_hw_set_qos_enable(struct gsc_dev *dev)
-{
-	u32 cfg = readl(dev->regs + GSC_ENABLE);
-	cfg |= GSC_ENABLE_QOS_ENABLE;
-	writel(cfg, dev->regs + GSC_ENABLE);
-}
-
 void gsc_hw_enable_localout(struct gsc_ctx *ctx, bool enable)
 {
 	struct gsc_dev *dev = ctx->gsc_dev;
+	u32 cfg = 0;
 
 	if (enable) {
+		gsc_dbg("GSC start(%d)\n", dev->id);
 		/* realtime effort */
-		gsc_hw_set_buscon_realtime(dev);
+		cfg = readl(dev->regs + GSC_BUSCON);
+		cfg |= GSC_BUSCON_REAL_TIME_ACCESS_EN;
+		writel(cfg, dev->regs + GSC_BUSCON);
+
+		/* set enable sfr */
 		gsc_hw_set_pp_index_init(dev);
 
 		gsc_hw_set_smart_if_pix_num(ctx);
 		gsc_hw_set_smart_if_con(dev, true);
 		gsc_hw_set_lookup_table(dev);
-
-		gsc_hw_set_qos_enable(dev);
-		gsc_hw_enable_control(dev, true);
-		gsc_dbg("GSC start(%d)", dev->id);
-	} else {
-		gsc_hw_set_smart_if_con(dev, false);
-		gsc_hw_enable_control(dev, false);
 		gsc_hw_set_sfr_update(ctx);
+
+		cfg = readl(dev->regs + GSC_ENABLE);
+		cfg |= GSC_ENABLE_ON;
+		cfg |= GSC_ENABLE_QOS_ENABLE;
+		writel(cfg, dev->regs + GSC_ENABLE);
+	} else {
+		gsc_dbg("GSC stop(%d)\n", dev->id);
+		gsc_hw_set_smart_if_con(dev, false);
+		cfg = readl(dev->regs + GSC_ENABLE);
+		cfg &= ~GSC_ENABLE_ON;
+		writel(cfg, dev->regs + GSC_ENABLE);
 	}
 }
 
@@ -272,32 +267,27 @@ int gsc_wait_operating(struct gsc_dev *dev)
 
 int gsc_wait_stop(struct gsc_dev *dev)
 {
+	unsigned long timeo = jiffies + 10; /* timeout of 50ms */
 	u32 cfg;
 	int ret;
 
-	ktime_t start = ktime_get();
-
-	do {
+	while (time_before(jiffies, timeo)) {
 		cfg = readl(dev->regs + GSC_ENABLE);
-		if (!(cfg & GSC_ENABLE_STOP_STATUS_STOP_SEQ)) {
-			gsc_dbg("GSC stop(%d)", dev->id);
+		if (!(cfg & GSC_ENABLE_STOP_STATUS_STOP_SEQ))
 			return 0;
-		}
 		usleep_range(10, 20);
-	} while(ktime_us_delta(ktime_get(), start) < 1000000);
-
+	}
 	/* This is workaround until next chips.
 	 * If fimd is stop than gsc, gsc didn't work complete
 	 */
 
-	gsc_err("Stop timeout!!");
 	gsc_hw_set_sw_reset(dev);
 	ret = gsc_wait_reset(dev);
 	if (ret < 0) {
 		gsc_err("gscaler s/w reset timeout");
 		return ret;
 	}
-
+	gsc_info("wait time : %d ms", jiffies_to_msecs(jiffies - timeo + 10));
 	return 0;
 }
 
@@ -480,22 +470,6 @@ void gsc_hw_set_input_buf_mask_all(struct gsc_dev *dev)
 	writel(cfg, dev->regs + GSC_IN_BASE_ADDR_Y_MASK);
 }
 
-void gsc_hw_set_input_buf_fixed(struct gsc_dev *dev)
-{
-	u32 cfg = readl(dev->regs + GSC_IN_BASE_ADDR_Y_MASK);
-	cfg &= ~(0x3 << 16);
-
-	writel(cfg, dev->regs + GSC_IN_BASE_ADDR_Y_MASK);
-}
-
-void gsc_hw_set_output_buf_fixed(struct gsc_dev *dev)
-{
-	u32 cfg = readl(dev->regs + GSC_OUT_BASE_ADDR_Y_MASK);
-	cfg &= ~(0x1F << 16);
-
-	writel(cfg, dev->regs + GSC_IN_BASE_ADDR_Y_MASK);
-}
-
 void gsc_hw_set_output_buf_mask_all(struct gsc_dev *dev)
 {
 	u32 cfg;
@@ -569,24 +543,6 @@ void gsc_hw_set_input_addr(struct gsc_dev *dev, struct gsc_addr *addr,
 
 }
 
-void gsc_hw_set_input_addr_fixed(struct gsc_dev *dev, struct gsc_addr *addr)
-{
-	gsc_dbg("src_buf: 0x%X, cb: 0x%X, cr: 0x%X",
-		addr->y, addr->cb, addr->cr);
-	writel(addr->y, dev->regs + GSC_IN_BASE_ADDR_Y(0));
-	writel(addr->cb, dev->regs + GSC_IN_BASE_ADDR_CB(0));
-	writel(addr->cr, dev->regs + GSC_IN_BASE_ADDR_CR(0));
-}
-
-void gsc_hw_set_output_addr_fixed(struct gsc_dev *dev, struct gsc_addr *addr)
-{
-	gsc_dbg("dst_buf: 0x%X, cb: 0x%X, cr: 0x%X",
-			addr->y, addr->cb, addr->cr);
-	writel(addr->y, dev->regs + GSC_OUT_BASE_ADDR_Y(0));
-	writel(addr->cb, dev->regs + GSC_OUT_BASE_ADDR_CB(0));
-	writel(addr->cr, dev->regs + GSC_OUT_BASE_ADDR_CR(0));
-}
-
 void gsc_hw_set_output_addr(struct gsc_dev *dev,
 			     struct gsc_addr *addr, int index)
 {
@@ -619,7 +575,15 @@ void gsc_hw_set_input_path(struct gsc_ctx *ctx)
 	} else {
 		cfg |= GSC_IN_PATH_LOCAL;
 		if (ctx->in_path == GSC_WRITEBACK) {
-			cfg |= GSC_IN_LOCAL_WB;
+			cfg |= GSC_IN_LOCAL_FIMD_WB;
+		} else {
+			struct v4l2_subdev *sd = dev->pipeline.sensor;
+			struct gsc_sensor_info *s_info =
+				v4l2_get_subdev_hostdata(sd);
+			if (s_info->pdata->cam_port == CAM_PORT_A)
+				cfg |= GSC_IN_LOCAL_CAM0;
+			else
+				cfg |= GSC_IN_LOCAL_CAM1;
 		}
 	}
 
@@ -671,12 +635,8 @@ void gsc_hw_set_in_image_rgb(struct gsc_ctx *ctx)
 		cfg |= GSC_IN_RGB565;
 	else if (frame->fmt->pixelformat == V4L2_PIX_FMT_BGR32)
 		cfg |= GSC_IN_XRGB8888;
-	else if (frame->fmt->pixelformat == V4L2_PIX_FMT_RGB32) {
-		if (gsc_cap_opened(dev))
-			cfg |= GSC_IN_XRGB8888;
-		else
-			cfg |= GSC_IN_XRGB8888 | GSC_IN_RB_SWAP;
-	}
+	else if (frame->fmt->pixelformat == V4L2_PIX_FMT_RGB32)
+		cfg |= GSC_IN_XRGB8888 | GSC_IN_RB_SWAP;
 
 	writel(cfg, dev->regs + GSC_IN_CON);
 }
@@ -794,10 +754,17 @@ void gsc_hw_set_out_image_rgb(struct gsc_ctx *ctx)
 	u32 cfg;
 
 	cfg = readl(dev->regs + GSC_OUT_CON);
-	if (is_csc_eq_709)
-		cfg |= GSC_OUT_RGB_HD_WIDE;
-	else
-		cfg |= GSC_OUT_RGB_SD_WIDE;
+	if (is_csc_eq_709) {
+		if (ctx->gsc_ctrls.csc_range->val)
+			cfg |= GSC_OUT_RGB_HD_WIDE;
+		else
+			cfg |= GSC_OUT_RGB_HD_NARROW;
+	} else {
+		if (ctx->gsc_ctrls.csc_range->val)
+			cfg |= GSC_OUT_RGB_SD_WIDE;
+		else
+			cfg |= GSC_OUT_RGB_SD_NARROW;
+	}
 
 	if (ctx->out_path != GSC_DMA) {
 		cfg |= GSC_OUT_XRGB8888;
@@ -956,15 +923,8 @@ void gsc_hw_set_sfr_update(struct gsc_ctx *ctx)
 {
 	struct gsc_dev *dev = ctx->gsc_dev;
 	u32 cfg;
-	ktime_t start = ktime_get();
 
-	do {
-		cfg = readl(dev->regs + GSC_ENABLE);
-		if (!(cfg & GSC_ENABLE_SFR_UPDATE))
-			break;
-		udelay(1);
-	} while(ktime_us_delta(ktime_get(), start) < 20000);
-
+	cfg = readl(dev->regs + GSC_ENABLE);
 	cfg |= GSC_ENABLE_SFR_UPDATE;
 	writel(cfg, dev->regs + GSC_ENABLE);
 }
@@ -980,41 +940,18 @@ void gsc_hw_set_mixer(int id)
 	writel(cfg, SYSREG_DISP1BLK_CFG);
 }
 
-void gsc_hw_set_local_src(struct gsc_dev *dev, bool on)
-{
-	u32 cfg = readl(dev->sysreg_disp + DSD_CFG);
-	cfg &= ~(0x3 << 7);
-
-	if (on)
-		cfg |= (0x3 << 7);
-
-	writel(cfg, dev->sysreg_disp + DSD_CFG);
-}
-
-void gsc_hw_set_local_dst(struct gsc_dev *dev, int out, bool on)
+void gsc_hw_set_local_dst(struct gsc_dev* dev, int out, bool on)
 {
 	u32 cfg = readl(dev->sysreg_disp + DSD_CFG);
 
-	if (soc_is_exynos5430()) {
-		if (on) {
-			cfg &= ~((0x3 << (4 + dev->id * 2)) |
-				(0x1 << (0 + dev->id)));
-			cfg |= (0x1 << (4 + dev->id * 2));
-			writel(cfg, dev->sysreg_disp + DSD_CFG);
-			writel(0x80000000,dev->sysreg_disp + DSD_RESERVE10);
-		} else {
-			cfg &= ~(0x3 << (4 + dev->id * 2));
-			writel(cfg, dev->sysreg_disp + DSD_CFG);
-		}
+	if (on) {
+		cfg &= ~((0x3 << (4 + dev->id * 2)) | (0x1 << (0 + dev->id)));
+		cfg |= (0x1 << (4 + dev->id * 2));
+		writel(cfg, dev->sysreg_disp + DSD_CFG);
+		writel(0x80000000, dev->sysreg_disp + DSD_RESERVE10);
 	} else {
-		if (on) {
-			cfg &= ~(0x3 << (3 + (dev->id * 2)));
-			cfg |= (0 << (3 + ((dev->id) * 2)));
-			writel(cfg, dev->sysreg_disp + DSD_CFG);
-		} else {
-			cfg &= ~(0x3 << (3 + (dev->id * 2)));
-			writel(cfg, dev->sysreg_disp + DSD_CFG);
-		}
+		cfg &= ~(0x3 << (4 + dev->id * 2));
+		writel(cfg, dev->sysreg_disp + DSD_CFG);
 	}
 }
 
@@ -1037,14 +974,15 @@ void gsc_hw_set_pixelasync_reset_wb(struct gsc_dev *dev)
 	writel(cfg, SYSREG_GSCBLK_CFG1);
 }
 
-void gsc_hw_set_for_wb(struct gsc_dev *dev)
+void gsc_hw_set_sysreg_writeback(struct gsc_dev *dev)
 {
-	writel(0x80000000, dev->regs + 0xAE8);
-}
+	u32 cfg = readl(SYSREG_GSCBLK_CFG1);
 
-void gsc_hw_set_sysreg_writeback(struct gsc_dev *dev, bool on)
-{
-	writel(0x00000001, dev->sysreg_gscl + GSCLBLK_CFG0);
+	cfg |= GSC_BLK_DISP1WB_DEST(dev->id);
+	cfg |= GSC_BLK_GSCL_WB_IN_SRC_SEL(dev->id);
+	cfg |= GSC_BLK_SW_RESET_WB_DEST(dev->id);
+
+	writel(cfg, SYSREG_GSCBLK_CFG1);
 }
 
 void gsc_hw_set_pxlasync_camif_lo_mask(struct gsc_dev *dev, bool on)

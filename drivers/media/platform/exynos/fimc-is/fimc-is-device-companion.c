@@ -40,12 +40,8 @@
 #include "fimc-is-dt.h"
 #include "fimc-is-device-companion.h"
 #include "fimc-is-sec-define.h"
-#if defined(CONFIG_OIS_USE)
-#include "fimc-is-device-ois.h"
-#endif
-#ifdef CONFIG_COMPANION_USE
-#include "fimc-is-companion-dt.h"
-#endif
+
+
 extern int fimc_is_comp_video_probe(void *data);
 
 int fimc_is_companion_wait(struct fimc_is_device_companion *device)
@@ -231,21 +227,12 @@ static int fimc_is_companion_gpio_on(struct fimc_is_device_companion *device)
 {
 	int ret = 0;
 	struct exynos_platform_fimc_is_sensor *pdata;
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
-	struct fimc_is_from_info *sysfs_finfo;
-	struct exynos_sensor_pin (*pin_ctrls)[2][GPIO_CTRL_MAX];
-#endif
-	struct fimc_is_core *core;
 
 	BUG_ON(!device);
 	BUG_ON(!device->pdev);
 	BUG_ON(!device->pdata);
 
 	pdata = device->pdata;
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
-	pin_ctrls = pdata->pin_ctrls;
-#endif
-	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
 
 	if (test_bit(FIMC_IS_COMPANION_GPIO_ON, &device->state)) {
 		err("%s : already gpio on", __func__);
@@ -257,35 +244,6 @@ static int fimc_is_companion_gpio_on(struct fimc_is_device_companion *device)
 		ret = -EINVAL;
 		goto p_err;
 	}
-
-	core->running_rear_camera = true;
-
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
-	if(core->use_sensor_dynamic_voltage_mode) {
-		fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
-		if (pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][0].name != NULL &&
-			!strcmp(pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][0].name, "CAM_SEN_A2.8V_AP")) {
-			if (sysfs_finfo->header_ver[1] == '1' && sysfs_finfo->header_ver[2] == '6' && sysfs_finfo->header_ver[4] == 'L') {
-				pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][0].voltage = 2950000;
-				info("LSI Sensor EVT2.4 voltage(%d)\n", pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][0].voltage);
-			} else {
-				pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][0].voltage = 2800000;
-			}
-		}
-
-#if defined(CONFIG_SOC_EXYNOS5433)
-		if (pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][1].name != NULL &&
-			!strcmp(pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][1].name, "CAM_SEN_CORE_1.2V_AP")) {
-			if (sysfs_finfo->header_ver[1] == '1' && sysfs_finfo->header_ver[2] == '6' && sysfs_finfo->header_ver[4] == 'S') {
-				pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][1].voltage = 1050000;
-				info("SONY Sensor  voltage(%d)\n", pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][1].voltage);
-			} else {
-				pin_ctrls[pdata->scenario][GPIO_SCENARIO_ON][1].voltage = 1200000;
-			}
-		}
-#endif
-	}
-#endif
 
 	ret = pdata->gpio_cfg(device->pdev, pdata->scenario, GPIO_SCENARIO_ON);
 	if (ret) {
@@ -303,7 +261,6 @@ static int fimc_is_companion_gpio_off(struct fimc_is_device_companion *device)
 {
 	int ret = 0;
 	struct exynos_platform_fimc_is_sensor *pdata;
-	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
 
 	BUG_ON(!device);
 	BUG_ON(!device->pdev);
@@ -331,11 +288,8 @@ static int fimc_is_companion_gpio_off(struct fimc_is_device_companion *device)
 	clear_bit(FIMC_IS_COMPANION_GPIO_ON, &device->state);
 
 p_err:
-	core->running_rear_camera = false;
-
 	return ret;
 }
-
 
 int fimc_is_companion_open(struct fimc_is_device_companion *device)
 {
@@ -346,14 +300,12 @@ int fimc_is_companion_open(struct fimc_is_device_companion *device)
 	static char companion_fw_name[100];
 	static char master_setf_name[100];
 	static char mode_setf_name[100];
-#if !defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
 	static char fw_name[100];
 	static char setf_name[100];
-#endif
 
 	BUG_ON(!device);
 
-	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
+	core = device->core;
 	spi_gpio = &core->spi_gpio;
 
 	if (test_bit(FIMC_IS_COMPANION_OPEN, &device->state)) {
@@ -363,20 +315,16 @@ int fimc_is_companion_open(struct fimc_is_device_companion *device)
 	}
 
 	device->companion_status = FIMC_IS_COMPANION_OPENNING;
-	core->running_rear_camera = true;
 #if defined(CONFIG_PM_RUNTIME)
 	pm_runtime_get_sync(&device->pdev->dev);
-#else
-	fimc_is_companion_runtime_resume(&device->pdev->dev);
 #endif
-#if !defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
-	ret = fimc_is_sec_fw_sel(core, &device->pdev->dev, fw_name, setf_name, false);
+	ret = fimc_is_sec_fw_sel(core, &device->pdev->dev, fw_name, setf_name, 0);
 	if (ret < 0) {
 		err("failed to select firmware (%d)", ret);
-		goto p_err_pm;
+		goto p_err;
 	}
-#endif
-	ret = fimc_is_sec_concord_fw_sel(core, &device->pdev->dev, companion_fw_name, master_setf_name, mode_setf_name);
+
+	ret = fimc_is_sec_concord_fw_sel(core, &device->pdev->dev, companion_fw_name, master_setf_name, mode_setf_name, 0);
 
 	/* TODO: loading firmware */
 	fimc_is_s_int_comb_isp(core, false, INTMR2_INTMCIS22);
@@ -392,19 +340,18 @@ int fimc_is_companion_open(struct fimc_is_device_companion *device)
 		ret = fimc_is_comp_loadfirm(core);
 		if (ret) {
 			err("fimc_is_comp_loadfirm() fail");
-			goto p_err_pm;
+			goto p_err;
                 }
 		ret = fimc_is_comp_loadcal(core);
 		if (ret) {
 			err("fimc_is_comp_loadcal() fail");
 		}
-
-		fimc_is_power_binning(core);
-
+		if(core->fan53555_client != NULL)
+			fimc_is_power_binning(core);
 		ret = fimc_is_comp_loadsetf(core);
 		if (ret) {
 			err("fimc_is_comp_loadsetf() fail");
-			goto p_err_pm;
+			goto p_err;
 		}
 	}
 
@@ -427,56 +374,14 @@ int fimc_is_companion_open(struct fimc_is_device_companion *device)
 	device->companion_status = FIMC_IS_COMPANION_OPENDONE;
 	fimc_is_companion_wakeup(device);
 
-#if defined(CONFIG_OIS_USE)
-	if(core->use_ois) {
-		if (!core->use_ois_hsi2c) {
-			pin_config_set(FIMC_IS_SPI_PINNAME, "gpc2-2",
-				PINCFG_PACK(PINCFG_TYPE_FUNC, 1));
-			pin_config_set(FIMC_IS_SPI_PINNAME, "gpc2-3",
-				PINCFG_PACK(PINCFG_TYPE_FUNC, 1));
-		}
-
-		if (!core->ois_ver_read) {
-			fimc_is_ois_check_fw(core);
-		}
-
-		fimc_is_ois_exif_data(core);
-
-		if (!core->use_ois_hsi2c) {
-			pin_config_set(FIMC_IS_SPI_PINNAME, "gpc2-2",
-				PINCFG_PACK(PINCFG_TYPE_FUNC, 2));
-			pin_config_set(FIMC_IS_SPI_PINNAME, "gpc2-3",
-				PINCFG_PACK(PINCFG_TYPE_FUNC, 2));
-		}
-	}
-#endif
-
-	info("[COMP:D] %s(%d)status(%d)\n", __func__, ret, device->companion_status);
-	return ret;
-
-p_err_pm:
-#if defined(CONFIG_PM_RUNTIME)
-	pm_runtime_put_sync(&device->pdev->dev);
-#else
-	fimc_is_companion_runtime_suspend(&device->pdev->dev);
-#endif
-
 p_err:
-	err("[COMP:D] open fail(%d)status(%d)", ret, device->companion_status);
+	info("[COMP:D] %s(%d)status(%d)\n", __func__, ret,device->companion_status);
 	return ret;
 }
 
 int fimc_is_companion_close(struct fimc_is_device_companion *device)
 {
 	int ret = 0;
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
-	u32 timeout;
-#endif
-	struct fimc_is_core *core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
-	if (!core) {
-		err("core is NULL");
-		return -EINVAL;
-	}
 
 	BUG_ON(!device);
 
@@ -488,29 +393,11 @@ int fimc_is_companion_close(struct fimc_is_device_companion *device)
 
 #if defined(CONFIG_PM_RUNTIME)
 	pm_runtime_put_sync(&device->pdev->dev);
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
-	if (core != NULL && !test_bit(FIMC_IS_ISCHAIN_POWER_ON, &core->state)) {
-		warn("only companion device closing after open..");
-		timeout = 2000;
-		while ((readl(PMUREG_CAM1_STATUS) & 0x1) && timeout) {
-			timeout--;
-			usleep_range(1000, 1000);
-			if (!(timeout % 100))
-				warn("wait for CAM1 power down..(%d)", timeout);
-		}
-		if (timeout == 0)
-			err("CAM1 power down failed(CAM1:0x%08x, A5:0x%08x)\n",
-					readl(PMUREG_CAM1_STATUS), readl(PMUREG_ISP_ARM_STATUS));
-	}
 #endif
-#else
-	fimc_is_companion_runtime_suspend(&device->pdev->dev);
-#endif /* CONFIG_PM_RUNTIME */
 
 	clear_bit(FIMC_IS_COMPANION_OPEN, &device->state);
 
 p_err:
-	core->running_rear_camera = false;
 	device->companion_status = FIMC_IS_COMPANION_IDLE;
 	info("[COMP:D] %s(%d)\n", __func__, ret);
 	return ret;
@@ -570,9 +457,7 @@ static int fimc_is_companion_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, device);
 	device_init_wakeup(&pdev->dev, true);
 	core->companion = device;
-#ifdef CONFIG_OIS_USE
-	core->pin_ois_en = device->pdata->pin_ois_en;
-#endif
+	device->core = core;
 
 	/* init state */
 	clear_bit(FIMC_IS_COMPANION_OPEN, &device->state);
@@ -637,19 +522,9 @@ int fimc_is_companion_runtime_suspend(struct device *dev)
 	int ret = 0;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct fimc_is_device_companion *device;
-#ifdef CONFIG_AF_HOST_CONTROL
-	struct fimc_is_core *core;
-#endif
 
 	info("%s\n", __func__);
 
-#ifdef CONFIG_AF_HOST_CONTROL
-	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
-	if (!core) {
-		err("core is NULL");
-		return -EINVAL;
-	}
-#endif
 	device = (struct fimc_is_device_companion *)platform_get_drvdata(pdev);
 	if (!device) {
 		err("device is NULL");
@@ -689,26 +564,11 @@ int fimc_is_companion_runtime_resume(struct device *dev)
 	int ret = 0;
 	struct platform_device *pdev = to_platform_device(dev);
 	struct fimc_is_device_companion *device;
-#ifdef CONFIG_AF_HOST_CONTROL
-	struct fimc_is_core *core;
 
-	core = (struct fimc_is_core *)dev_get_drvdata(fimc_is_dev);
-	if (!core) {
-		err("core is NULL");
-		return -EINVAL;
-	}
-#endif
 	device = (struct fimc_is_device_companion *)platform_get_drvdata(pdev);
 	if (!device) {
 		err("device is NULL");
 		return -EINVAL;
-	}
-
-	/* Sensor clock on */
-	ret = fimc_is_companion_mclk_on(device);
-	if (ret) {
-		err("fimc_is_companion_mclk_on is fail(%d)", ret);
-		goto p_err;
 	}
 
 	/* gpio init */
@@ -724,6 +584,14 @@ int fimc_is_companion_runtime_resume(struct device *dev)
 		err("fimc_is_companion_iclk_on is fail(%d)", ret);
 		goto p_err;
 	}
+
+	/* Sensor clock on */
+	ret = fimc_is_companion_mclk_on(device);
+	if (ret) {
+		err("fimc_is_companion_mclk_on is fail(%d)", ret);
+		goto p_err;
+	}
+
 p_err:
 	info("[COMP:D] %s(%d)\n", __func__, ret);
 	return ret;

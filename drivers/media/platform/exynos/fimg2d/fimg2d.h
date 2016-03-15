@@ -34,7 +34,6 @@
 #define ip_is_g2d_5r()		(fimg2d_ip_version_is() == IP_VER_G2D_5R)
 #define ip_is_g2d_5v()		(fimg2d_ip_version_is() == IP_VER_G2D_5V)
 #define ip_is_g2d_5h()		(fimg2d_ip_version_is() == IP_VER_G2D_5H)
-#define ip_is_g2d_5hp()		(fimg2d_ip_version_is() == IP_VER_G2D_5HP)
 #define ip_is_g2d_5g()		(fimg2d_ip_version_is() == IP_VER_G2D_5G)
 #define ip_is_g2d_4p()		(fimg2d_ip_version_is() == IP_VER_G2D_4P)
 
@@ -536,7 +535,6 @@ struct fimg2d_control {
 	struct device *dev;
 	struct resource *mem;
 	void __iomem *regs;
-	bool boost;
 
 	atomic_t drvact;
 	atomic_t suspended;
@@ -556,7 +554,6 @@ struct fimg2d_control {
 	struct pm_qos_request exynos5_g2d_mif_qos;
 	struct pm_qos_request exynos5_g2d_int_qos;
 	struct fimg2d_platdata *pdata;
-	struct clk *clk_osc;
 	struct clk *clk_parn1;
 	struct clk *clk_parn2;
 	struct clk *clk_chld1;

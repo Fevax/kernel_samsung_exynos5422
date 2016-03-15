@@ -44,7 +44,7 @@
 #define MFC_MAX_DPBS		32
 #define MFC_INFO_INIT_FD	-1
 
-#define MFC_NUM_CONTEXTS	32
+#define MFC_NUM_CONTEXTS	16
 #define MFC_MAX_DRM_CTX		2
 /* Interrupt timeout */
 #define MFC_INT_TIMEOUT		2000
@@ -71,7 +71,6 @@
 #define MFC_BASE_MASK		((1 << 17) - 1)
 
 #define FLAG_LAST_FRAME		0x80000000
-#define MFC_MAX_INTERVAL	(2 * USEC_PER_SEC)
 
 /* Command ID for smc */
 #define SMC_PROTECTION_SET	0x81000000
@@ -85,9 +84,6 @@
 /* Parameter for smc */
 #define SMC_PROTECTION_ENABLE	1
 #define SMC_PROTECTION_DISABLE	0
-
-/* Maximum number of temporal layers */
-#define VIDEO_MAX_TEMPORAL_LAYERS 7
 
 /*
  *  MFC region id for smc
@@ -203,35 +199,6 @@ enum mfc_buf_process_type {
 
 struct s5p_mfc_ctx;
 struct s5p_mfc_extra_buf;
-struct s5p_mfc_dev;
-
-#define MFC_DEV_NUM_MAX			2
-#define MFC_TRACE_STR_LEN		80
-#define MFC_TRACE_COUNT_MAX		1024
-struct _mfc_trace {
-	unsigned long long time;
-	char str[MFC_TRACE_STR_LEN];
-};
-
-#define MFC_TRACE_DEV(fmt, args...)							\
-	do {											\
-		int cpu = raw_smp_processor_id();						\
-		int cnt;									\
-		cnt = atomic_inc_return(&dev->trace_ref) & (MFC_TRACE_COUNT_MAX - 1);	\
-		dev->mfc_trace[cnt].time = cpu_clock(cpu);					\
-		snprintf(dev->mfc_trace[cnt].str, MFC_TRACE_STR_LEN,			\
-				"[d:%d] " fmt, dev->id, ##args);				\
-	} while(0)
-
-#define MFC_TRACE_CTX(fmt, args...)							\
-	do {											\
-		int cpu = raw_smp_processor_id();						\
-		int cnt;									\
-		cnt = atomic_inc_return(&dev->trace_ref) & (MFC_TRACE_COUNT_MAX - 1);	\
-		dev->mfc_trace[cnt].time = cpu_clock(cpu);					\
-		snprintf(dev->mfc_trace[cnt].str, MFC_TRACE_STR_LEN,			\
-				"[d:%d, c:%d] " fmt, ctx->dev->id, ctx->num, ##args);		\
-	} while(0)
 
 /**
  * struct s5p_mfc_buf - MFC buffer
@@ -246,7 +213,6 @@ struct s5p_mfc_buf {
 	} planes;
 	int used;
 	int already;
-	int consumed;
 };
 
 #define vb_to_mfc_buf(x)	\
@@ -257,8 +223,6 @@ struct s5p_mfc_pm {
 	atomic_t	power;
 	struct device	*device;
 	spinlock_t	clklock;
-
-	int clock_off_steps;
 };
 
 struct s5p_mfc_fw {
@@ -414,11 +378,6 @@ struct s5p_mfc_dev {
 	int fw_size;
 	int drm_fw_status;
 	int is_support_smc;
-
-	atomic_t trace_ref;
-	struct _mfc_trace *mfc_trace;
-
-	struct mutex curr_rate_lock;
 };
 
 /**
@@ -454,7 +413,6 @@ struct s5p_mfc_h264_enc_params {
 	enum v4l2_mpeg_video_h264_hierarchical_coding_type hier_qp_type;
 	u8 hier_qp_layer;
 	u8 hier_qp_layer_qp[7];
-	u32 hier_qp_layer_bit[7];
 	u8 sei_gen_enable;
 	u8 sei_fp_curr_frame_0;
 	enum v4l2_mpeg_video_h264_sei_fp_arrangement_type sei_fp_arrangement_type;
@@ -506,8 +464,9 @@ struct s5p_mfc_vp8_enc_params {
 	u8 vp8_goldenframesel;
 	u8 vp8_gfrefreshperiod;
 	u8 hierarchy_qp_enable;
-	u8 hier_qp_layer_qp[3];
-	u32 hier_qp_layer_bit[3];
+	u8 hierarchy_qp_layer0;
+	u8 hierarchy_qp_layer1;
+	u8 hierarchy_qp_layer2;
 	u8 num_refs_for_p;
 	u8 intra_4x4mode_disable;
 	u8 num_temporal_layer;
@@ -520,7 +479,7 @@ struct s5p_mfc_enc_params {
 	u16 width;
 	u16 height;
 
-	u32 gop_size;
+	u16 gop_size;
 	enum v4l2_mpeg_video_multi_slice_mode slice_mode;
 	u16 slice_mb;
 	u32 slice_bit;
@@ -673,11 +632,6 @@ struct dec_dpb_ref_info {
 	struct stored_dpb_info dpb[MFC_MAX_DPBS];
 };
 
-struct temporal_layer_info {
-	unsigned int temporal_layer_count;
-	unsigned int temporal_layer_bitrate[VIDEO_MAX_TEMPORAL_LAYERS];
-};
-
 struct mfc_user_shared_handle {
 	int fd;
 	struct ion_handle *ion_handle;
@@ -688,14 +642,6 @@ struct s5p_mfc_raw_info {
 	int num_planes;
 	int stride[3];
 	int plane_size[3];
-};
-
-#define MFC_TIME_INDEX		8
-struct mfc_timestamp {
-	struct list_head list;
-	struct timeval timestamp;
-	int index;
-	int interval;
 };
 
 struct s5p_mfc_dec {
@@ -783,7 +729,6 @@ struct s5p_mfc_enc {
 	unsigned int in_slice;
 
 	int stored_tag;
-	struct mfc_user_shared_handle sh_handle;
 };
 
 /**
@@ -886,11 +831,6 @@ struct s5p_mfc_ctx {
 
 	int is_max_fps;
 	int buf_process_type;
-
-	struct mfc_timestamp ts_array[MFC_TIME_INDEX];
-	struct list_head ts_list;
-	int ts_count;
-	int ts_is_full;
 };
 
 #define fh_to_mfc_ctx(x)	\
@@ -994,47 +934,25 @@ static inline unsigned int mfc_version(struct s5p_mfc_dev *dev)
 					(dev->fw.date >= 0x121214))
 #define FW_HAS_ADV_RC_MODE(dev)		(IS_MFCV6(dev) &&		\
 					(dev->fw.date >= 0x130329))
-#define FW_HAS_I_LIMIT_RC_MODE(dev)	((IS_MFCv7X(dev) &&		\
-					(dev->fw.date >= 0x140801)) ||	\
-					(IS_MFCv8X(dev) &&		\
-					(dev->fw.date >= 0x140808)))
 #define FW_HAS_POC_TYPE_CTRL(dev)	(IS_MFCV6(dev) &&		\
 					(dev->fw.date >= 0x130405))
 #define FW_HAS_DYNAMIC_DPB(dev)		((IS_MFCv7X(dev) || IS_MFCv8X(dev))&&	\
 					(dev->fw.date >= 0x131108))
-#define FW_HAS_NOT_CODED(dev)		(IS_MFCv8X(dev) &&		\
-					(dev->fw.date >= 0x150108))
 #define FW_HAS_BASE_CHANGE(dev)		((IS_MFCv7X(dev) || IS_MFCv8X(dev))&&	\
 					(dev->fw.date >= 0x131108))
-#define FW_HAS_TEMPORAL_SVC_CH(dev)	((IS_MFCv8X(dev) &&			\
-					 (dev->fw.date >= 0x140821)))
 #define FW_WAKEUP_AFTER_RISC_ON(dev)	(IS_MFCv8X(dev) || IS_MFCv78(dev))
-#define FW_HAS_LAST_DISP_INFO(dev)	(IS_MFCv8X(dev) &&			\
-					(dev->fw.date >= 0x141205))
-#define FW_HAS_GOP2(dev)		(IS_MFCv8X(dev) &&			\
-					(dev->fw.date >= 0x150320))
 
 #define HW_LOCK_CLEAR_MASK		(0xFFFFFFFF)
 
 #define is_h264(ctx)		((ctx->codec_mode == S5P_FIMV_CODEC_H264_DEC) ||\
 				(ctx->codec_mode == S5P_FIMV_CODEC_H264_MVC_DEC))
-#define is_mpeg4vc1(ctx)	((ctx->codec_mode == S5P_FIMV_CODEC_VC1RCV_DEC) ||\
-				(ctx->codec_mode == S5P_FIMV_CODEC_VC1_DEC) ||\
-				(ctx->codec_mode == S5P_FIMV_CODEC_MPEG4_DEC))
-#define MFC_UHD_RES		(3840*2160)
-#define MFC_HD_RES		(1280*720)
-#define is_UHD(ctx)		(((ctx)->img_width * (ctx)->img_height) == MFC_UHD_RES)
-#define under_HD(ctx)		(((ctx)->img_width * (ctx)->img_height) <= MFC_HD_RES)
-#define not_coded_cond(ctx)	is_mpeg4vc1(ctx)
 
 /* Extra information for Decoder */
 #define	DEC_SET_DUAL_DPB		(1 << 0)
 #define	DEC_SET_DYNAMIC_DPB		(1 << 1)
-#define	DEC_SET_LAST_FRAME_INFO		(1 << 2)
 /* Extra information for Encoder */
 #define	ENC_SET_RGB_INPUT		(1 << 0)
 #define	ENC_SET_SPARE_SIZE		(1 << 1)
-#define	ENC_SET_TEMP_SVC_CH		(1 << 2)
 
 #define MFC_QOS_FLAG_NODATA		0xFFFFFFFF
 
@@ -1047,7 +965,6 @@ struct s5p_mfc_fmt {
 };
 
 int get_framerate(struct timeval *to, struct timeval *from);
-int get_framerate_by_interval(int interval);
 static inline int clear_hw_bit(struct s5p_mfc_ctx *ctx)
 {
 	struct s5p_mfc_dev *dev = ctx->dev;
@@ -1078,20 +995,6 @@ static inline int is_drm_node(enum s5p_mfc_node_type node)
 
 	return 0;
 }
-
-int s5p_mfc_dec_ctx_ready(struct s5p_mfc_ctx *ctx);
-int s5p_mfc_enc_ctx_ready(struct s5p_mfc_ctx *ctx);
-
-static inline int s5p_mfc_ctx_ready(struct s5p_mfc_ctx *ctx)
-{
-	if (ctx->type == MFCINST_DECODER)
-		return s5p_mfc_dec_ctx_ready(ctx);
-	else if (ctx->type == MFCINST_ENCODER)
-		return s5p_mfc_enc_ctx_ready(ctx);
-
-	return 0;
-}
-
 
 #if defined(CONFIG_EXYNOS_MFC_V5)
 #include "regs-mfc-v5.h"

@@ -18,6 +18,7 @@
 #include "fimc-is-subdev-ctrl.h"
 #include "fimc-is-groupmgr.h"
 #include "fimc-is-resourcemgr.h"
+#include "fimc-is-interface.h"
 
 #define SENSOR_MAX_CTL			0x10
 #define SENSOR_MAX_CTL_MASK		(SENSOR_MAX_CTL-1)
@@ -43,15 +44,17 @@
 #define FIMC_IS_CRANGE_FULL		0
 #define FIMC_IS_CRANGE_LIMITED		1
 
+#ifdef CONFIG_COMPANION_USE
 #if defined(CONFIG_SOC_EXYNOS5422)
 #define FIMC_IS_SPI_PINNAME "14000000.pinctrl"
 #endif
 
-#if defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#if defined(CONFIG_SOC_EXYNOS5430)
 #define FIMC_IS_SPI_PINNAME "14cc0000.pinctrl"
 #endif
 #define FIMC_IS_SPI_OUTPUT	1
 #define FIMC_IS_SPI_FUNC	2
+#endif
 
 /*global state*/
 enum fimc_is_ischain_state {
@@ -67,13 +70,6 @@ enum fimc_is_camera_device {
 	CAMERA_SINGLE_REAR,
 	CAMERA_SINGLE_FRONT,
 };
-
-#ifdef CONFIG_COMPANION_USE
-enum fimc_is_companion_sensor {
-	COMPANION_SENSOR_2P2 = 1,
-	COMPANION_SENSOR_IMX240 = 2,
-};
-#endif
 
 struct fimc_is_from_info {
 	u32		bin_start_addr;
@@ -133,10 +129,9 @@ struct fimc_is_from_info {
 	u32		coef6_crc_addr;
 	char		concord_header_ver[12];
 	bool		is_c1_caldata_read;
-	char		load_c1_fw_name[50];
-	char		load_c1_mastersetf_name[50];
-	char		load_c1_modesetf_name[50];
-	int		sensor_id;
+	char		load_c1_fw_name[30];
+	char		load_c1_mastersetf_name[30];
+	char		load_c1_modesetf_name[30];
 #endif
 	char		header_ver[12];
 	char		cal_map_ver[4];
@@ -144,18 +139,11 @@ struct fimc_is_from_info {
 	char		oem_ver[12];
 	char		awb_ver[12];
 	char		shading_ver[12];
-	char		load_fw_name[50];
-	char		load_setfile_name[50];
-	char		project_name[9];
+	char		load_fw_name[30];
+	char		load_setfile_name[30];
 	bool		is_caldata_read;
 };
 
-#ifdef CONFIG_OIS_USE
-struct fimc_is_ois_info {
-	char		header_ver[7];
-	char		load_fw_name[50];
-};
-#endif
 
 struct fimc_is_ishcain_mem {
 	/* buffer base */
@@ -221,13 +209,19 @@ struct fimc_is_device_ischain {
 	u32					bds_width;
 	u32					bds_height;
 	u32					setfile;
-	u32					color_range;
+	u32					scp_setfile;
 
 	struct camera2_sm			capability;
 	struct camera2_uctl			cur_peri_ctl;
 	struct camera2_uctl			peri_ctls[SENSOR_MAX_CTL];
 
+	/*fimc bns*/
+	u32					bns_width;
+	u32					bns_height;
+
 	/*isp margin*/
+	u32					sensor_width;
+	u32					sensor_height;
 	u32					margin_left;
 	u32					margin_right;
 	u32					margin_width;
@@ -294,8 +288,11 @@ int fimc_is_ischain_open(struct fimc_is_device_ischain *device,
 	struct fimc_is_minfo *minfo);
 int fimc_is_ischain_close(struct fimc_is_device_ischain *device,
 	struct fimc_is_video_ctx *vctx);
-int fimc_is_ischain_init_wrap(struct fimc_is_device_ischain *device,
-	u32 input);
+int fimc_is_ischain_init(struct fimc_is_device_ischain *device,
+	u32 module_id,
+	u32 group_id,
+	u32 video_id,
+	u32 flag);
 int fimc_is_ischain_g_capability(struct fimc_is_device_ischain *this,
 	u32 user_ptr);
 int fimc_is_ischain_print_status(struct fimc_is_device_ischain *this);
@@ -398,7 +395,7 @@ int fimc_is_itf_force_stop(struct fimc_is_device_ischain *device,
 int fimc_is_itf_map(struct fimc_is_device_ischain *device,
 	u32 group, u32 shot_addr, u32 shot_size);
 int fimc_is_itf_i2c_lock(struct fimc_is_device_ischain *this,
-	int i2c_clk, bool lock);
+			int i2c_clk, bool lock);
 
 extern const struct fimc_is_queue_ops fimc_is_ischain_3aa_ops;
 extern const struct fimc_is_queue_ops fimc_is_ischain_isp_ops;

@@ -289,7 +289,7 @@ static struct v4l2_queryctrl controls[] = {
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.name = "Display status",
 		.minimum = 0,
-		.maximum = 4,
+		.maximum = 3,
 		.step = 1,
 		.default_value = 0,
 	},
@@ -379,7 +379,7 @@ static struct v4l2_queryctrl controls[] = {
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.name = "QoS ratio value",
 		.minimum = 20,
-		.maximum = 1000,
+		.maximum = 200,
 		.step = 10,
 		.default_value = 100,
 	},
@@ -631,13 +631,11 @@ int s5p_mfc_dec_ctx_ready(struct s5p_mfc_ctx *ctx)
 		ctx->state == MFCINST_RUNNING &&
 		ctx->wait_state == WAIT_NONE &&
 		((dec->is_dynamic_dpb && ctx->dst_queue_cnt >= 1) ||
-		 (dec->is_dynamic_dpb && is_h264(ctx) && dec->ref_queue_cnt == (ctx->dpb_count + 5)) ||
 		(!dec->is_dynamic_dpb && ctx->dst_queue_cnt >= ctx->dpb_count)))
 		return 1;
 	/* Context is to return last frame */
 	if (ctx->state == MFCINST_FINISHING &&
 		((dec->is_dynamic_dpb && ctx->dst_queue_cnt >= 1) ||
-		 (dec->is_dynamic_dpb && is_h264(ctx) && dec->ref_queue_cnt == (ctx->dpb_count + 5)) ||
 		(!dec->is_dynamic_dpb && ctx->dst_queue_cnt >= ctx->dpb_count)))
 		return 1;
 	/* Context is to set buffers */
@@ -1687,7 +1685,6 @@ static int vidioc_querybuf(struct file *file, void *priv,
 	return ret;
 }
 
-extern int no_order;
 /* Queue a buffer */
 static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 {
@@ -1712,7 +1709,7 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 			return -EIO;
 		}
 
-		if (no_order && dec->is_dts_mode) {
+		if (dec->is_dts_mode) {
 			mfc_debug(7, "timestamp: %ld %ld\n",
 					buf->timestamp.tv_sec,
 					buf->timestamp.tv_usec);
@@ -1731,7 +1728,6 @@ static int vidioc_qbuf(struct file *file, void *priv, struct v4l2_buffer *buf)
 			ctx->framerate = ctx->last_framerate;
 			s5p_mfc_qos_on(ctx);
 		}
-		mfc_debug(2, "Src input size = %d\n", buf->m.planes[0].bytesused);
 		ret = vb2_qbuf(&ctx->vq_src, buf);
 	} else {
 		ret = vb2_qbuf(&ctx->vq_dst, buf);
@@ -1826,11 +1822,9 @@ static int vidioc_streamoff(struct file *file, void *priv,
 		memset(&ctx->last_timestamp, 0, sizeof(struct timeval));
 		ret = vb2_streamoff(&ctx->vq_src, type);
 	} else if (type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+		if (!(ctx->buf_process_type & MFCBUFPROC_COPY))
+			s5p_mfc_qos_off(ctx);
 		ret = vb2_streamoff(&ctx->vq_dst, type);
-		if (!ret) {
-			if (!(ctx->buf_process_type & MFCBUFPROC_COPY))
-				s5p_mfc_qos_off(ctx);
-		}
 	} else {
 		mfc_err_ctx("unknown v4l2 buffer type\n");
 	}
@@ -1863,8 +1857,6 @@ static int dec_ext_info(struct s5p_mfc_ctx *ctx)
 		val |= DEC_SET_DUAL_DPB;
 	if (FW_HAS_DYNAMIC_DPB(dev))
 		val |= DEC_SET_DYNAMIC_DPB;
-	if (FW_HAS_LAST_DISP_INFO(dev))
-		val |= DEC_SET_LAST_FRAME_INFO;
 
 	return val;
 }
@@ -2145,9 +2137,6 @@ static int vidioc_s_ctrl(struct file *file, void *priv,
 		dec->is_dual_dpb = ctrl->value;
 		break;
 	case V4L2_CID_MPEG_VIDEO_QOS_RATIO:
-		if (ctrl->value > 150)
-			ctrl->value = 1000;
-		mfc_info_ctx("set %d qos_ratio.\n", ctrl->value);
 		ctx->qos_ratio = ctrl->value;
 		break;
 	case V4L2_CID_MPEG_MFC_SET_DYNAMIC_DPB_MODE:
@@ -2852,7 +2841,6 @@ static void s5p_mfc_buf_queue(struct vb2_buffer *vb)
 
 	if (vq->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE) {
 		buf->used = 0;
-		buf->consumed = 0;
 		mfc_debug(2, "Src queue: %p\n", &ctx->src_queue);
 		mfc_debug(2, "Adding to src: %p (0x%08lx, 0x%08lx)\n", vb,
 			(unsigned long)s5p_mfc_mem_plane_addr(ctx, vb, 0),
@@ -3003,7 +2991,6 @@ int s5p_mfc_init_dec_ctx(struct s5p_mfc_ctx *ctx)
 #ifdef CONFIG_MFC_USE_BUS_DEVFREQ
 	INIT_LIST_HEAD(&ctx->qos_list);
 #endif
-	INIT_LIST_HEAD(&ctx->ts_list);
 
 	INIT_LIST_HEAD(&dec->dpb_queue);
 	dec->dpb_queue_cnt = 0;

@@ -43,7 +43,6 @@ void fimg2d_clk_restore(struct fimg2d_control *ctrl);
 #ifdef CONFIG_OF
 int exynos5430_fimg2d_clk_setup(struct fimg2d_control *ctrl);
 int exynos5430_fimg2d_clk_set(struct fimg2d_control *ctrl);
-int exynos5433_fimg2d_clk_set_osc(struct fimg2d_control *ctrl);
 #endif
 
 

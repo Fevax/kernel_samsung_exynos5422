@@ -75,7 +75,7 @@ extern int gsc_dbg;
 	} while (0)
 
 #define GSC_MAX_CLOCKS			5
-#define GSC_SHUTDOWN_TIMEOUT		(1*HZ)
+#define GSC_SHUTDOWN_TIMEOUT		((100*HZ)/1000)
 #define GSC_MAX_DEVS			4
 #define WORKQUEUE_NAME_SIZE		32
 #define GSC_MAX_PREF_BUF		3
@@ -87,8 +87,8 @@ extern int gsc_dbg;
 #define GSC_OUT_MAX_MASK_NUM		7
 #define GSC_OUT_DEF_SRC			15
 #define GSC_OUT_DEF_DST			7
-#define DEFAULT_GSC_SINK_WIDTH		1920
-#define DEFAULT_GSC_SINK_HEIGHT		1080
+#define DEFAULT_GSC_SINK_WIDTH		800
+#define DEFAULT_GSC_SINK_HEIGHT		480
 #define DEFAULT_GSC_SOURCE_WIDTH	800
 #define DEFAULT_GSC_SOURCE_HEIGHT	480
 
@@ -96,7 +96,6 @@ extern int gsc_dbg;
 #define GSC_PAD_SINK			0
 #define GSC_PAD_SOURCE			1
 #define GSC_PADS_NUM			2
-#define WB_GSC_ID			2
 
 #define	GSC_PARAMS			(1 << 0)
 #define	GSC_SRC_FMT			(1 << 1)
@@ -126,16 +125,22 @@ enum gsc_dev_flags {
 	/* for output node */
 	ST_OUTPUT_OPEN,
 	ST_OUTPUT_STREAMON,
-	DEBUG_STREAMON,
-	DEBUG_S_STREAM,
 	/* for capture node */
 	ST_CAPT_OPEN,
 	ST_CAPT_PEND,
 	ST_CAPT_RUN,
+	ST_CAPT_STREAM,
 	ST_CAPT_PIPE_STREAM,
 	ST_CAPT_SHUT,
 	ST_CAPT_APPLY_CFG,
 	ST_CAPT_JPEG,
+};
+
+enum gsc_cap_input_entity {
+	GSC_IN_NONE,
+	GSC_IN_FLITE_PREVIEW,
+	GSC_IN_FLITE_CAMCORDING,
+	GSC_IN_FIMD_WRITEBACK,
 };
 
 enum gsc_qos_status {
@@ -196,7 +201,6 @@ enum gsc_yuv_fmt {
 #define is_AYV12(img) (img == V4L2_PIX_FMT_YVU420)
 #define is_ver_5a (pdata->ip_ver == IP_VER_GSC_5A)
 #define is_ver_5h (pdata->ip_ver == IP_VER_GSC_5H)
-#define is_ver_5hp (pdata->ip_ver == IP_VER_GSC_5HP)
 #define is_rotation \
 	((ctx->gsc_ctrls.rotate->val == 90) || (ctx->gsc_ctrls.rotate->val == 270))
 #define use_input_rotator \
@@ -245,6 +249,18 @@ struct gsc_fmt {
 };
 
 /**
+ * struct gsc_input_buf - the driver's video buffer
+ * @vb:	videobuf2 buffer
+ * @list : linked list structure for buffer queue
+ * @idx : index of G-Scaler input buffer
+ */
+struct gsc_input_buf {
+	struct vb2_buffer	vb;
+	struct list_head	list;
+	int			idx;
+};
+
+/**
  * struct gsc_addr - the G-Scaler physical address set
  * @y:	 luminance plane address
  * @cb:	 Cb plane address
@@ -254,19 +270,6 @@ struct gsc_addr {
 	dma_addr_t	y;
 	dma_addr_t	cb;
 	dma_addr_t	cr;
-};
-
-/**
- * struct gsc_input_buf - the driver's video buffer
- * @vb:	videobuf2 buffer
- * @list : linked list structure for buffer queue
- * @idx : index of G-Scaler input buffer
- */
-struct gsc_input_buf {
-	struct vb2_buffer	vb;
-	struct list_head	list;
-	struct gsc_addr		addr;
-	int			idx;
 };
 
 /* struct gsc_ctrls - the G-Scaler control set
@@ -347,21 +350,31 @@ struct gsc_frame {
 	u8	alpha;
 };
 
+struct gsc_sensor_info {
+	struct exynos_isp_info *pdata;
+	struct v4l2_subdev *sd;
+	struct clk *camclk;
+};
+
 struct gsc_capture_device {
 	struct gsc_ctx			*ctx;
 	struct video_device		*vfd;
-	struct v4l2_subdev		*sd;
+	struct v4l2_subdev		*sd_cap;
+	struct v4l2_subdev		*sd_disp;
+	struct v4l2_subdev		*sd_flite[FLITE_MAX_ENTITIES];
+	struct v4l2_subdev		*sd_csis[CSIS_MAX_ENTITIES];
+	struct gsc_sensor_info		sensor[SENSOR_MAX_ENTITIES];
 	struct media_pad		vd_pad;
 	struct media_pad		sd_pads[GSC_PADS_NUM];
 	struct v4l2_mbus_framefmt	mbus_fmt[GSC_PADS_NUM];
 	struct vb2_queue		vbq;
-	struct list_head		active_buf_q;
 	int				active_buf_cnt;
 	int				buf_index;
 	int				input_index;
 	int				refcnt;
 	u32				frame_cnt;
 	u32				reqbufs_cnt;
+	enum gsc_cap_input_entity	input;
 	u32				cam_index;
 	bool				user_subdev_api;
 };
@@ -513,6 +526,9 @@ struct gsc_pipeline {
 	struct media_pipeline *pipe;
 	struct v4l2_subdev *sd_gsc;
 	struct v4l2_subdev *disp;
+	struct v4l2_subdev *flite;
+	struct v4l2_subdev *csis;
+	struct v4l2_subdev *sensor;
 };
 
 /**
@@ -566,10 +582,6 @@ struct gsc_dev {
 	void __iomem			*sysreg_disp;
 	void __iomem			*sysreg_gscl;
 	struct timer_list		op_timer;
-	u32				q_cnt;
-	u32				dq_cnt;
-	u32				isr_cnt;
-	u32				wq_cnt;
 };
 
 /**
@@ -775,12 +787,11 @@ active_queue_pop(struct gsc_output_device *vid_out, struct gsc_dev *dev)
 	struct gsc_input_buf *buf;
 
 	buf = list_entry(vid_out->active_buf_q.next, struct gsc_input_buf, list);
-
 	return buf;
 }
 
 static inline void active_queue_push(struct gsc_output_device *vid_out,
-			     struct gsc_input_buf *buf, struct gsc_dev *dev)
+				     struct gsc_input_buf *buf, struct gsc_dev *dev)
 {
 	list_add_tail(&buf->list, &vid_out->active_buf_q);
 }
@@ -812,15 +823,11 @@ void gsc_hw_set_frm_done_irq_mask(struct gsc_dev *dev, bool mask);
 void gsc_hw_set_overflow_irq_mask(struct gsc_dev *dev, bool mask);
 void gsc_hw_set_gsc_irq_enable(struct gsc_dev *dev, bool mask);
 void gsc_hw_set_input_buf_mask_all(struct gsc_dev *dev);
-void gsc_hw_set_input_buf_fixed(struct gsc_dev *dev);
-void gsc_hw_set_output_buf_fixed(struct gsc_dev *dev);
 void gsc_hw_set_output_buf_mask_all(struct gsc_dev *dev);
 void gsc_hw_set_input_buf_masking(struct gsc_dev *dev, u32 shift, bool enable);
 void gsc_hw_set_output_buf_masking(struct gsc_dev *dev, u32 shift, bool enable);
 void gsc_hw_set_input_addr(struct gsc_dev *dev, struct gsc_addr *addr, int index);
 void gsc_hw_set_output_addr(struct gsc_dev *dev, struct gsc_addr *addr, int index);
-void gsc_hw_set_output_addr_fixed(struct gsc_dev *dev, struct gsc_addr *addr);
-void gsc_hw_set_local_src(struct gsc_dev *dev, bool on);
 void gsc_hw_set_freerun_clock_mode(struct gsc_dev *dev, bool mask);
 void gsc_hw_set_input_path(struct gsc_ctx *ctx);
 void gsc_hw_set_in_size(struct gsc_ctx *ctx);
@@ -837,8 +844,7 @@ void gsc_hw_set_global_alpha(struct gsc_ctx *ctx);
 void gsc_hw_set_sfr_update(struct gsc_ctx *ctx);
 void gsc_hw_set_local_dst(struct gsc_dev *gsc, int out, bool on);
 void gsc_hw_set_mixer(int id);
-void gsc_hw_set_sysreg_writeback(struct gsc_dev *dev, bool on);
-void gsc_hw_set_for_wb(struct gsc_dev *dev);
+void gsc_hw_set_sysreg_writeback(struct gsc_dev *dev);
 void gsc_hw_set_pxlasync_camif_lo_mask(struct gsc_dev *dev, bool on);
 void gsc_hw_set_h_coef(struct gsc_ctx *ctx);
 void gsc_hw_set_v_coef(struct gsc_ctx *ctx);
@@ -876,8 +882,4 @@ void gsc_hw_set_smart_if_pix_num(struct gsc_ctx *ctx);
 void gsc_hw_set_sfr_update(struct gsc_ctx *ctx);
 void gsc_hw_set_dynamic_clock_gating(struct gsc_dev *dev);
 void gsc_hw_set_input_apply_pending_bit(struct gsc_dev *dev);
-void gsc_hw_set_input_addr_fixed(struct gsc_dev *dev, struct gsc_addr *addr);
-void gsc_hw_set_lookup_table(struct gsc_dev *dev);
-void gsc_hw_set_buscon_realtime(struct gsc_dev *dev);
-void gsc_hw_set_qos_enable(struct gsc_dev *dev);
 #endif /* GSC_CORE_H_ */

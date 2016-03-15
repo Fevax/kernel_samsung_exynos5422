@@ -10,19 +10,13 @@
  */
 
 #include <linux/platform_device.h>
-#include <linux/spi/spi.h>
 #include "fimc-is-sec-define.h"
 #include "fimc-is-companion.h"
 #include "fimc-is-device-ischain.h"
 #include "fimc-is-fan53555.h"
-#ifdef USE_ION_ALLOC
-#include <linux/dma-buf.h>
-#include <linux/exynos_ion.h>
-#include <linux/ion.h>
-#endif
 
-#define COMP_FW_EVT0			"companion_fw_evt0.bin"
-#define COMP_FW_EVT1			"companion_fw_evt1.bin"
+#define COMP_FW_EVT0				"companion_fw_evt0.bin"
+#define COMP_FW_EVT1				"companion_fw_evt1.bin"
 #define COMP_SETFILE_MASTER		"companion_master_setfile.bin"
 #define COMP_SETFILE_MODE		"companion_mode_setfile.bin"
 #define COMP_CAL_DATA		"cal"
@@ -50,11 +44,10 @@
 #define BIG_ENDIAN 1
 extern bool companion_lsc_isvalid;
 extern bool companion_coef_isvalid;
-extern bool crc32_c1_check;
 static u16 companion_ver;
 static u32 concord_fw_size;
 char companion_crc[10];
-
+//#ifdef USE_SPI
 #if 1
 static int fimc_is_comp_spi_read(struct spi_device *spi,
 		void *buf, u16 rx_addr, size_t size)
@@ -85,6 +78,9 @@ static int fimc_is_comp_spi_read(struct spi_device *spi,
 	spi_message_add_tail(&t_c, &m);
 	spi_message_add_tail(&t_r, &m);
 
+#ifndef CONFIG_SOC_EXYNOS5422
+	spi->max_speed_hz = 48000000;
+#endif
 	ret = spi_sync(spi, &m);
 	if (ret) {
 		err("spi sync error - can't read data");
@@ -105,6 +101,9 @@ static int fimc_is_comp_spi_single_write(struct spi_device *spi, u16 addr, u16 d
 	tx_buf[3] = (data >>  8) & 0xFF; /* data */
 	tx_buf[4] = (data >>  0) & 0xFF; /* data */
 
+#ifndef CONFIG_SOC_EXYNOS5422
+	spi->max_speed_hz = 48000000;
+#endif
 	ret = spi_write(spi, &tx_buf[0], 5);
 	if (ret)
 		err("spi sync error - can't read data");
@@ -127,6 +126,9 @@ static int fimc_is_comp_spi_burst_write(struct spi_device *spi,
 	burst_width = (burst_width + 2 - 1) / 2 * 2;
 
 	burst_size = size / burst_width * burst_width;
+#ifndef CONFIG_SOC_EXYNOS5422
+	spi->max_speed_hz = 48000000;
+#endif
 
 	for (i = 0; i < burst_size; i += burst_width) {
 		tx_buf[0] = 0x02; /* write cmd */
@@ -430,77 +432,49 @@ static int fimc_is_comp_load_binary(struct fimc_is_core *core, char *name)
 {
 	int ret = 0;
 	u32 size = 0;
-	const struct firmware *fw_blob = NULL;
+	const struct firmware *fw_blob;
 	static char fw_name[100];
 	struct file *fp = NULL;
 	mm_segment_t old_fs;
 	long nread;
 	int fw_requested = 1;
 	u32 i;
-   	u8 *buf = NULL;
+	u8 *buf = NULL;
 	u32 data, cal_addr;
 	char version_str[60];
 	u16 addr1, addr2;
 	char companion_ver[12] = {0, };
-	struct fimc_is_from_info *sysfs_finfo;
-#ifdef USE_ION_ALLOC
-	struct ion_handle *handle = NULL;
-#endif
-	int retry_count = 0;
 
 	BUG_ON(!core);
 	BUG_ON(!core->pdev);
 	BUG_ON(!core->companion);
 	BUG_ON(!core->companion->pdev);
 	BUG_ON(!name);
-#ifdef USE_ION_ALLOC
-	BUG_ON(!core->fimc_ion_client);
-#endif
-	fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
 
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	snprintf(fw_name, sizeof(fw_name), "%s%s",FIMC_IS_SETFILE_SDCARD_PATH, name);
 	fp = filp_open(fw_name, O_RDONLY, 0);
-	if (IS_ERR_OR_NULL(fp)) {
+	if (IS_ERR(fp)) {
 		goto request_fw;
 	}
 
 	fw_requested = 0;
 	size = fp->f_path.dentry->d_inode->i_size;
 	pr_info("start read sdcard, file path %s, size %d Bytes\n", fw_name, size);
-
-#ifdef USE_ION_ALLOC
-	handle = ion_alloc(core->fimc_ion_client, (size_t)size, 0,
-				EXYNOS_ION_HEAP_SYSTEM_MASK, 0);
-	if (IS_ERR_OR_NULL(handle)) {
-		err("fimc_is_comp_load_binary:failed to ioc_alloc\n");
-		ret = -ENOMEM;
-		goto p_err;
-	}
-
-	buf = (u8 *)ion_map_kernel(core->fimc_ion_client, handle);
-	if (IS_ERR_OR_NULL(buf)) {
-		err("fimc_is_comp_load_binary:fail to ion_map_kernle\n");
-		ret = -ENOMEM;
-		goto p_err;
-	}
-#else
 	buf = vmalloc(size);
 	if (!buf) {
 		err("failed to allocate memory");
 		ret = -ENOMEM;
 		goto p_err;
 	}
-#endif
-
 	nread = vfs_read(fp, (char __user *)buf, size, &fp->f_pos);
 	if (nread != size) {
 		err("failed to read firmware file, %ld Bytes\n", nread);
 		ret = -EIO;
 		goto p_err;
 	}
-	if ((!strcmp(name, COMP_FW_EVT0)) || (!strcmp(name, sysfs_finfo->load_c1_fw_name))) {
+	if ((!strcmp(name, COMP_FW_EVT0)) || (!strcmp(name, COMP_FW_EVT1))) {
 		strncpy(companion_crc, buf+nread-4, 4);
 		strncpy(companion_ver, buf+nread - 16, 11);
 	}
@@ -509,13 +483,7 @@ request_fw:
 	if (fw_requested) {
 		snprintf(fw_name, sizeof(fw_name), "%s", name);
 		set_fs(old_fs);
-		retry_count = 3;
 		ret = request_firmware(&fw_blob, fw_name, &core->companion->pdev->dev);
-		while (--retry_count && ret == -EAGAIN) {
-			err("request_firmware retry(count:%d)", retry_count);
-			ret = request_firmware(&fw_blob, fw_name, &core->companion->pdev->dev);
-		}
-
 		if (ret) {
 			err("request_firmware is fail(ret:%d)", ret);
 			ret = -EINVAL;
@@ -535,34 +503,19 @@ request_fw:
 		}
 
 		size = fw_blob->size;
-#ifdef USE_ION_ALLOC
-		handle = ion_alloc(core->fimc_ion_client, (size_t)size, 0,
-				EXYNOS_ION_HEAP_SYSTEM_MASK, 0);
-		if (IS_ERR_OR_NULL(handle)) {
-			err("fimc_is_comp_load_binary:failed to ioc_alloc\n");
-			ret = -ENOMEM;
-			goto p_err;
-		}
-
-		buf = (u8 *)ion_map_kernel(core->fimc_ion_client, handle);
-		if (IS_ERR_OR_NULL(buf)) {
-			err("fimc_is_comp_load_binary:fail to ion_map_kernle\n");
-			ret = -ENOMEM;
-			goto p_err;
-		}
-#else
 		buf = vmalloc(size);
 		if (!buf) {
 			err("failed to allocate memory");
 			ret = -ENOMEM;
 			goto p_err;
 		}
-#endif
 		memcpy((void *)buf, fw_blob->data, size);
-		if ((!strcmp(name, COMP_FW_EVT0)) || (!strcmp(name, sysfs_finfo->load_c1_fw_name))) {
+		if ((!strcmp(name, COMP_FW_EVT0)) || (!strcmp(name, COMP_FW_EVT1))) {
 			memcpy((void *)companion_crc, fw_blob->data + size - 4, 4);
 			memcpy((void *)companion_ver, fw_blob->data + size - 16, 11);
 		}
+
+		release_firmware(fw_blob);
 	}
 
 	if (!strcmp(name, COMP_FW_EVT0)) {
@@ -573,7 +526,7 @@ request_fw:
 		}
 		concord_fw_size = size;
 		info("%s version : %s\n", name, companion_ver);
-	} else if (!strcmp(name, sysfs_finfo->load_c1_fw_name)) {
+	} else if (!strcmp(name, COMP_FW_EVT1)) {
 		ret = fimc_is_comp_spi_burst_write(core->spi1, buf, size, 256, LITTLE_ENDIAN);
 		if (ret) {
 			err("fimc_is_comp_spi_write() fail");
@@ -582,11 +535,7 @@ request_fw:
 		concord_fw_size = size;
 		info("%s version : %s\n", name, companion_ver);
 	} else if (!strcmp(name, COMP_DEFAULT_LSC)) {
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			cal_addr = MEM_GRAS_B_IMX240;
-		} else {
-			cal_addr = MEM_GRAS_B_2P2;
-		}
+		cal_addr = MEM_GRAS_B;
 		addr1 = (cal_addr >> 16) & 0xFFFF;
 		addr2 = cal_addr & 0xFFFF;
 		ret = fimc_is_comp_single_write(core, 0x6428, addr1);
@@ -603,11 +552,7 @@ request_fw:
 			goto p_err;
 		}
 	} else if (!strcmp(name, COMP_DEFAULT_COEF)) {
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			cal_addr = MEM_XTALK_10_IMX240;
-		} else {
-			cal_addr = MEM_XTALK_10_2P2;
-		}
+		cal_addr = MEM_XTALK_10;
 		addr1 = (cal_addr >> 16) & 0xFFFF;
 		addr2 = cal_addr & 0xFFFF;
 		ret = fimc_is_comp_single_write(core, 0x6428, addr1);
@@ -630,7 +575,7 @@ request_fw:
 				*(buf + i + 1) << 16 |
 				*(buf + i + 2) << 8 |
 				*(buf + i + 3) << 0;
-			if(!strcmp(name, sysfs_finfo->load_c1_mastersetf_name)) {
+			if(!strcmp(name, COMP_SETFILE_MASTER)) {
 				ret = fimc_is_comp_spi_single_write(core->spi1, (data >> 16), (u16)data);
 				if (ret) {
 					err("fimc_is_comp_spi_setf_write() fail");
@@ -652,29 +597,9 @@ request_fw:
 	}
 
 p_err:
-#ifdef USE_ION_ALLOC
-	if (!IS_ERR_OR_NULL(buf)) {
-		ion_unmap_kernel(core->fimc_ion_client, handle);
-	}
-
-	if (!IS_ERR_OR_NULL(handle)) {
-		ion_free(core->fimc_ion_client, handle);
-	}
-#else
-	if (buf) {
+	if (buf)
 		vfree(buf);
-	}
-#endif
-	if (!fw_requested) {
-		if (!IS_ERR_OR_NULL(fp)) {
-			filp_close(fp, current->files);
-		}
-		set_fs(old_fs);
-	} else {
-		if (!IS_ERR_OR_NULL(fw_blob)) {
-			release_firmware(fw_blob);
-		}
-	}
+
 	return ret;
 }
 
@@ -695,29 +620,17 @@ static int fimc_is_comp_load_cal(struct fimc_is_core *core, char *name)
 	if (!strcmp(name, COMP_LSC)) {
 		data_size = FIMC_IS_COMPANION_LSC_SIZE;
 		offset = sysfs_finfo->lsc_gain_start_addr;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = MEM_GRAS_B_IMX240;
-		} else {
-			comp_addr = MEM_GRAS_B_2P2;
-		}
+		comp_addr = MEM_GRAS_B;
 		endian = BIG_ENDIAN;
 	} else if (!strcmp(name, COMP_PDAF)) {
 		data_size = FIMC_IS_COMPANION_PDAF_SIZE;
 		offset = sysfs_finfo->pdaf_start_addr;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = MEM_AF_10_1_IMX240;
-		} else {
-			comp_addr = MEM_AF_10_1_2P2;
-		}
+		comp_addr = MEM_AF_10_1;
 		endian = LITTLE_ENDIAN;
 	} else if (!strcmp(name, COMP_COEF_CAL)) {
 		data_size = FIMC_IS_COMPANION_COEF_TOTAL_SIZE;
 		offset = sysfs_finfo->coef1_start;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = MEM_XTALK_10_IMX240;
-		} else {
-			comp_addr = MEM_XTALK_10_2P2;
-		}
+		comp_addr = MEM_XTALK_10;
 		endian = LITTLE_ENDIAN;
 	} else {
 		err("wrong companion cal data name\n");
@@ -819,74 +732,42 @@ static int fimc_is_comp_load_i2c_cal(struct fimc_is_core *core, u32 addr)
 
 	if (addr == sysfs_finfo->lsc_i0_gain_addr) {
 		data_size = FIMC_IS_COMPANION_LSC_I0_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_uParabolicCenterX_IMX240;
-		} else {
-			comp_addr = grasTuning_uParabolicCenterX_2P2;
-		}
+		comp_addr = grasTuning_uParabolicCenterX;
 		if (!companion_lsc_isvalid)
 			data3 = 0x780A;
 	} else if (addr == sysfs_finfo->lsc_j0_gain_addr) {
 		data_size = FIMC_IS_COMPANION_LSC_J0_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_uParabolicCenterY_IMX240;
-		} else {
-			comp_addr = grasTuning_uParabolicCenterY_2P2;
-		}
+		comp_addr = grasTuning_uParabolicCenterY;
 		if (!companion_lsc_isvalid)
 			data3 = 0xEC05;
 	} else if (addr == sysfs_finfo->lsc_a_gain_addr) {
 		data_size = FIMC_IS_COMPANION_LSC_A_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_uBiQuadFactorA_IMX240;
-		} else {
-			comp_addr = grasTuning_uBiQuadFactorA_2P2;
-		}
+		comp_addr = grasTuning_uBiQuadFactorA;
 		if (!companion_lsc_isvalid) {
 			data3 = 0x6A2A;
 			data4 = 0x0100;
 		}
 	} else if (addr == sysfs_finfo->lsc_k4_gain_addr) {
 		data_size = FIMC_IS_COMPANION_LSC_K4_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_uBiQuadFactorB_IMX240;
-		} else {
-			comp_addr = grasTuning_uBiQuadFactorB_2P2;
-		}
+		comp_addr = grasTuning_uBiQuadFactorB;
 		if (!companion_lsc_isvalid) {
 			data3 = 0x0040;
 			data4 = 0x0000;
 		}
 	} else if (addr == sysfs_finfo->lsc_scale_gain_addr) {
 		data_size = FIMC_IS_COMPANION_LSC_SCALE_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_uBiQuadScaleShiftAdder_IMX240;
-		} else {
-			comp_addr = grasTuning_uBiQuadScaleShiftAdder_2P2;
-		}
+		comp_addr = grasTuning_uBiQuadScaleShiftAdder;
 		if (!companion_lsc_isvalid)
 			data3 = 0x0600;
 	} else if (addr == sysfs_finfo->wcoefficient1_addr) {
 		data_size = FIMC_IS_COMPANION_WCOEF1_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = xtalkTuningParams_wcr_IMX240;
-		} else {
-			comp_addr = xtalkTuningParams_wcr_2P2;
-		}
+		comp_addr = xtalkTuningParams_wcr;
 	} else if (addr == sysfs_finfo->af_inf_addr) {
 		data_size = FIMC_IS_COMPANION_AF_INF_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_actuatorPositionToShadingPowerLut_0_IMX240;
-		} else {
-			comp_addr = grasTuning_actuatorPositionToShadingPowerLut_0_2P2;
-		}
+		comp_addr = grasTuning_actuatorPositionToShadingPowerLut_0_;
 	} else if (addr == sysfs_finfo->af_macro_addr) {
 		data_size = FIMC_IS_COMPANION_AF_MACRO_SIZE;
-		if (sysfs_finfo->sensor_id == COMPANION_SENSOR_IMX240) {
-			comp_addr = grasTuning_actuatorPositionToShadingPowerLut_9_IMX240;
-		} else {
-			comp_addr = grasTuning_actuatorPositionToShadingPowerLut_9_2P2;
-		}
+		comp_addr = grasTuning_actuatorPositionToShadingPowerLut_9_;
 	} else {
 		err("wrong companion cal data name\n");
 		return -EINVAL;
@@ -964,21 +845,10 @@ static int fimc_is_comp_load_i2c_cal(struct fimc_is_core *core, u32 addr)
 int fimc_is_power_binning(struct fimc_is_core *core)
 {
 	int ret = 0;
-	int err_check = 0, vout_sel = 0;
-	u16 read_value = 0x80;
-	int vout = 0;
+	u16 read_value = 1;
+	int vout = FAN53555_VOUT_1P00;
 	char buf[2]={0,};
 	loff_t pos = 0;
-	char *dcdc_name;
-	struct dcdc_power *dcdc = &core->companion_dcdc;
-
-	if (DCDC_VENDOR_NONE == dcdc->type) {
-		pr_err("%s: warning, DCDC power not exist\n", __func__);
-		return -ENODEV;
-	} else {
-		dcdc_name = (DCDC_VENDOR_FAN53555 == dcdc->type) ? "FAN" :
-				(DCDC_VENDOR_NCP6335B == dcdc->type) ? "NCP" : "Unkknown";
-	}
 
 	/*read BIN_INFO 0x5000 500C*/
 #if 0
@@ -992,77 +862,77 @@ int fimc_is_power_binning(struct fimc_is_core *core)
 
 	ret = read_data_from_file(FIMC_IS_ISP_CV, buf, 1, &pos);
 	if(ret > 0) {
-		if (kstrtoint(buf, 10, &vout_sel))
-			pr_err("%s: error, convert fail\n", __func__);
+		if (buf[0] == '1')
+			vout = FAN53555_VOUT_0P88;
+		else if (buf[0] == '2')
+			vout = FAN53555_VOUT_0P90;
+		else if (buf[0] == '3')
+			vout = FAN53555_VOUT_0P93;
+		else if (buf[0] == '4')
+			vout = FAN53555_VOUT_0P95;
+		else if (buf[0] == '5')
+			vout = FAN53555_VOUT_0P98;
+		else
+			vout = FAN53555_VOUT_1P00; /* defualt voltage */
 
-		vout = dcdc->get_vout_val(vout_sel);
-		ret = dcdc->set_vout(dcdc->client, vout);
+		ret = fan53555_set_vsel0_vout(core->fan53555_client, vout);
 		if (ret < 0 )
-			pr_err("%s: error, dcdc set_vout(%d). sel %d\n", __func__, ret, vout_sel);
+			pr_err("fan53555_set_vsel0_vout_error(%d)\n",ret);
 
-		pr_info("[%s::%d][BIN_INFO::%s, sel %d] read path(%s), DCDC %s\n",
-				__FUNCTION__, __LINE__, buf, vout_sel, FIMC_IS_ISP_CV, dcdc_name);
-		return vout_sel;
+		pr_info("[%s::%d][BIN_INFO::%s] read path(%s)\n", __FUNCTION__, __LINE__, buf,FIMC_IS_ISP_CV);
+		return vout;
 	}
 
 	ret = fimc_is_comp_spi_single_write(core->spi1, 0x642C, 0x5000);
-	if (ret) {
-		err_check = 1;
+	if (ret)
 		err("spi_single_write() fail");
-	}
 
 	ret = fimc_is_comp_spi_single_write(core->spi1, 0x642E, 0x500C);
-	if (ret) {
-		err_check = 1;
+	if (ret)
 		err("spi_single_write() fail");
-	}
 
-	ret = fimc_is_comp_single_read(core, 0x6F12, &read_value, 2);
-	if (ret) {
-		err_check = 1;
-		err("fimc_is_comp_single_read() fail");
-	}
+	fimc_is_comp_single_read(core, 0x6F12, &read_value, 2);
 
 	pr_info("[%s::%d][BIN_INFO::0x%04x]\n", __FUNCTION__, __LINE__, read_value);
 
 	if (read_value & 0x3F) {
 		if (read_value & (1<<CC_BIN6)) {
+			vout = FAN53555_VOUT_1P00;
 			buf[0]='6';
 		} else if (read_value & (1<<CC_BIN5)) {
+			vout = FAN53555_VOUT_0P98;
 			buf[0]='5';
 		} else if (read_value & (1<<CC_BIN4)) {
+			vout = FAN53555_VOUT_0P95;
 			buf[0]='4';
 		} else if (read_value & (1<<CC_BIN3)) {
+			vout = FAN53555_VOUT_0P93;
 			buf[0]='3';
 		} else if (read_value & (1<<CC_BIN2)) {
+			vout = FAN53555_VOUT_0P90;
 			buf[0]='2';
 		} else if (read_value & (1<<CC_BIN1)) {
+			vout = FAN53555_VOUT_0P88;
 			buf[0]='1';
 		} else {
+			vout = FAN53555_VOUT_1P00;
 			buf[0]='6';
 		}
 	} else {
+		vout = FAN53555_VOUT_1P00;
 		buf[0]='6';
-		err_check = 1;
 	}
-	if (kstrtoint(buf, 10, &vout_sel))
-		pr_err("%s: error, convert fail\n", __func__);
 
-	vout = dcdc->get_vout_val(vout_sel);
-	ret = dcdc->set_vout(dcdc->client, vout);
+	ret = fan53555_set_vsel0_vout(core->fan53555_client, vout);
 	if (ret < 0)
-		pr_err("%s: error, dcdc set_vout(%d), sel %d\n", __func__, ret, vout_sel);
+		pr_err("fan53555_set_vsel0_vout_error(%d)\n",ret);
 
-	if (err_check == 0) {
-		ret = write_data_to_file(FIMC_IS_ISP_CV, buf, 1, &pos);
-		if (ret < 0)
-			pr_err("bin_info_file_write() fail(%s)",buf);
-	}
+	if (write_data_to_file(FIMC_IS_ISP_CV, buf, 1, &pos) < 0)
+		pr_err("bin_info_file_write() fail(%s)",buf);
 
-	pr_info("[%s::%d][BIN_INFO::0x%04x] buf(%s) write. sel %d, DCDC %s\n",
-			__FUNCTION__, __LINE__, read_value,buf, vout_sel, dcdc_name);
+	pr_info("[%s::%d][BIN_INFO::0x%04x]buf(%s) write\n", __FUNCTION__, __LINE__, read_value,buf);
 
-	return vout_sel;
+	return vout;
 }
 
 int fimc_is_comp_is_valid(struct fimc_is_core *core)
@@ -1079,11 +949,9 @@ int fimc_is_comp_is_valid(struct fimc_is_core *core)
 	read_addr = 0x0;
 	fimc_is_comp_single_read(core, read_addr, &companion_id, 2);
 	pr_info("Companion vaildation: 0x%04x\n", companion_id);
-#if 0
 #if defined(CONFIG_SOC_EXYNOS5430)
 	if (companion_id != COMP_MAGIC_NUMBER)
 		ret = -EINVAL;
-#endif
 #endif
 exit:
 	return ret;
@@ -1092,7 +960,7 @@ exit:
 int fimc_is_comp_read_ver(struct fimc_is_core *core)
 {
 	int ret = 0;
-#if 0
+#ifndef CONFIG_SOC_EXYNOS5422
 	u16 read_addr;
 #endif
 
@@ -1102,7 +970,7 @@ int fimc_is_comp_read_ver(struct fimc_is_core *core)
 	}
 
 	/* check validation(Read data must be 0x73C1) */
-#if 0
+#ifndef CONFIG_SOC_EXYNOS5422
 	read_addr = 0x02;
 	fimc_is_comp_single_read(core, read_addr, &companion_ver, 2);
 #else
@@ -1156,11 +1024,6 @@ int fimc_is_comp_loadcal(struct fimc_is_core *core)
 	struct fimc_is_from_info *sysfs_finfo;
 	bool pdaf_valid = false;
 	int retry_count = 3;
-
-	if (!crc32_c1_check) {
-		pr_debug("CRC check fail.Do not apply cal data.");
-		return 0;
-	}
 
 	if (!core->spi1) {
 		pr_debug("spi1 device is not available");
@@ -1231,9 +1094,7 @@ retry:
 				goto p_err;
 			}
 			pr_info("LSC from FROM loaded");
-		}
-#ifdef USE_DEFAULT_CAL
-		else {
+		} else {
 			ret = fimc_is_comp_load_binary(core, COMP_DEFAULT_LSC);
 			if (ret) {
 				err("fimc_is_comp_load_binary(%s) fail", COMP_DEFAULT_LSC);
@@ -1241,7 +1102,6 @@ retry:
 			}
 			pr_info("Default LSC loaded");
 		}
-#endif
 		usleep_range(1000, 1000);
 	} else {
 		pr_info("Did not load LSC cal data");
@@ -1264,9 +1124,7 @@ retry:
 				goto p_err;
 			}
 			pr_info("COEF from FROM loaded");
-		}
-#ifdef USE_DEFAULT_CAL
-		else {
+		} else {
 			ret = fimc_is_comp_load_binary(core, COMP_DEFAULT_COEF);
 			if (ret) {
 				err("fimc_is_comp_load_binary(%s) fail", COMP_DEFAULT_COEF);
@@ -1274,7 +1132,6 @@ retry:
 			}
 			pr_info("Default COEF loaded");
 		}
-#endif
 		usleep_range(1000, 1000);
 	} else {
 		pr_info("Did not load COEF cal data");
@@ -1303,7 +1160,6 @@ int fimc_is_comp_loadfirm(struct fimc_is_core *core)
 {
 	int ret = 0;
 	int retry_count = 3;
-	struct fimc_is_from_info *sysfs_finfo;
 
 	if (!core->spi1) {
 		err("spi1 device is not available");
@@ -1333,11 +1189,10 @@ retry:
 		err("fimc_is_comp_i2c_setf_write() fail");
 	}
 
-	fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
 	if (companion_ver == 0x00A0)
 		ret = fimc_is_comp_load_binary(core, COMP_FW_EVT0);
 	else if (companion_ver == 0x00B0)
-		ret = fimc_is_comp_load_binary(core, sysfs_finfo->load_c1_fw_name);
+		ret = fimc_is_comp_load_binary(core, COMP_FW_EVT1);
 	if (ret) {
 		err("fimc_is_comp_load_firmware fail");
 		goto p_err;
@@ -1366,23 +1221,21 @@ p_err:
 int fimc_is_comp_loadsetf(struct fimc_is_core *core)
 {
 	int ret = 0;
-	struct fimc_is_from_info *sysfs_finfo;
 
 	if (!core->spi1) {
 		pr_debug("spi1 device is not available");
 		goto p_err;
 	}
 
-	fimc_is_sec_get_sysfs_finfo(&sysfs_finfo);
-	ret = fimc_is_comp_load_binary(core, sysfs_finfo->load_c1_mastersetf_name);
+	ret = fimc_is_comp_load_binary(core, COMP_SETFILE_MASTER);
 	if (ret) {
-		err("fimc_is_comp_load_binary(%s) fail", sysfs_finfo->load_c1_mastersetf_name);
+		err("fimc_is_comp_load_binary(%s) fail", COMP_SETFILE_MASTER);
 		goto p_err;
 	}
 
-	ret = fimc_is_comp_load_binary(core, sysfs_finfo->load_c1_modesetf_name);
+	ret = fimc_is_comp_load_binary(core, COMP_SETFILE_MODE);
 	if (ret) {
-		err("fimc_is_comp_load_binary(%s) fail", sysfs_finfo->load_c1_modesetf_name);
+		err("fimc_is_comp_load_binary(%s) fail", COMP_SETFILE_MODE);
 		goto p_err;
 	}
 	usleep_range(5000, 5000);

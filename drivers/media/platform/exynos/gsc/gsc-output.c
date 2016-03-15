@@ -42,8 +42,6 @@ int gsc_out_hw_reset_off(struct gsc_dev *gsc)
 int gsc_out_hw_set(struct gsc_ctx *ctx)
 {
 	struct gsc_dev *gsc = ctx->gsc_dev;
-	struct exynos_platform_gscaler *pdata = gsc->pdata;
-	struct gsc_scaler *sc = &ctx->scaler;
 	int ret = 0;
 
 	ret = gsc_set_scaler_info(ctx);
@@ -82,15 +80,6 @@ int gsc_out_hw_set(struct gsc_ctx *ctx)
 	gsc_hw_set_v_coef(ctx);
 	gsc_hw_set_input_rotation(ctx);
 
-	if (ctx->gsc_ctrls.rotate->val &&
-		((sc->main_hratio > GSC_SC_UP_MAX_RATIO) ||
-		(sc->main_vratio > GSC_SC_UP_MAX_RATIO)))
-		gsc_pm_qos_ctrl(gsc, GSC_QOS_ON, pdata->mif_min_otf_rot,
-				pdata->int_min_otf);
-	else
-		gsc_pm_qos_ctrl(gsc, GSC_QOS_ON, pdata->mif_min,
-				pdata->int_min_otf);
-
 	gsc_hw_enable_localout(ctx, true);
 	ret = gsc_wait_operating(gsc);
 	if (ret < 0) {
@@ -101,30 +90,43 @@ int gsc_out_hw_set(struct gsc_ctx *ctx)
 	return 0;
 }
 
-static int gsc_subdev_try_crop(struct gsc_dev *gsc, struct v4l2_rect *cr)
+static void gsc_subdev_try_crop(struct gsc_dev *gsc, struct v4l2_rect *cr)
 {
 	struct gsc_variant *variant = gsc->variant;
-	u32 pixel_rate = variant->pix_max->otf_w * variant->pix_max->otf_h;
+	u32 max_w, max_h, min_w, min_h;
+	u32 tmp_w, tmp_h;
 
-	if (cr->width < variant->pix_min->otf_w ||
-		cr->height < variant->pix_min->otf_h) {
-		gsc_err("Min size error");
-		goto err;
+	if (gsc->out.ctx->gsc_ctrls.rotate->val == 90 ||
+		gsc->out.ctx->gsc_ctrls.rotate->val == 270) {
+		max_w = variant->pix_max->otf_w;
+		max_h = variant->pix_max->otf_h;
+		min_w = variant->pix_min->otf_w;
+		min_h = variant->pix_min->otf_h;
+		tmp_w = cr->height;
+		tmp_h = cr->width;
+	} else {
+		max_w = variant->pix_max->otf_w;
+		max_h = variant->pix_max->otf_h;
+		min_w = variant->pix_min->otf_w;
+		min_h = variant->pix_min->otf_h;
+		tmp_w = cr->width;
+		tmp_h = cr->height;
 	}
 
-	if (cr->width * cr->height > pixel_rate) {
-		gsc_err("Max size error");
-		goto err;
-	}
+	gsc_dbg("min_w: %d, min_h: %d, max_w: %d, max_h = %d",
+	     min_w, min_h, max_w, max_h);
+
+	v4l_bound_align_image(&tmp_w, min_w, max_w, 0,
+			      &tmp_h, min_h, max_h, 0, 0);
+
+	if (gsc->out.ctx->gsc_ctrls.rotate->val == 90 ||
+	    gsc->out.ctx->gsc_ctrls.rotate->val == 270)
+		gsc_check_crop_change(tmp_h, tmp_w, &cr->width, &cr->height);
+	else
+		gsc_check_crop_change(tmp_w, tmp_h, &cr->width, &cr->height);
 
 	gsc_dbg("Aligned l:%d, t:%d, w:%d, h:%d", cr->left, cr->top,
 		cr->width, cr->height);
-
-	return 0;
-err:
-	gsc_err("l:%d, t:%d, w:%d, h:%d", cr->left, cr->top,
-		cr->width, cr->height);
-	return -EINVAL;
 }
 
 static int gsc_subdev_get_fmt(struct v4l2_subdev *sd,
@@ -254,11 +256,6 @@ static int gsc_subdev_set_crop(struct v4l2_subdev *sd,
 		ctx->state |= GSC_DST_CROP;
 
 		if (test_bit(ST_OUTPUT_STREAMON, &gsc->state)) {
-			ret = gsc_subdev_try_crop(gsc, &f->crop);
-			if (ret) {
-				gsc_err("Crop size error");
-				return ret;
-			}
 			ret = gsc_set_scaler_info(ctx);
 			if (ret) {
 				gsc_err("Scaler setup error");
@@ -284,6 +281,7 @@ static int gsc_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct gsc_dev *gsc = entity_data_to_gsc(v4l2_get_subdevdata(sd));
 	int ret;
+	unsigned long flags;
 
 	if (enable) {
 		if (gsc->out.ctx->out_path != GSC_FIMD) {
@@ -291,19 +289,26 @@ static int gsc_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 					gsc->out.ctx->out_path);
 			return -EINVAL;
 		}
+		spin_lock_irqsave(&gsc->slock, flags);
 		if (!test_bit(ST_OUTPUT_STREAMON, &gsc->state)) {
 			gsc_err("GSC is not ready start");
+			spin_unlock_irqrestore(&gsc->slock, flags);
 			return -EBUSY;
 		}
+		spin_unlock_irqrestore(&gsc->slock, flags);
 		ret = gsc_out_hw_set(gsc->out.ctx);
 		if (ret) {
 			gsc_err("GSC H/W setting is failed");
 			return -EINVAL;
 		}
 	} else {
+		spin_lock_irqsave(&gsc->slock, flags);
 		if (test_bit(ST_OUTPUT_STREAMON, &gsc->state)) {
 			gsc_out_hw_reset_off(gsc);
+			clear_bit(ST_OUTPUT_STREAMON, &gsc->state);
+			wake_up(&gsc->irq_queue);
 		}
+		spin_unlock_irqrestore(&gsc->slock, flags);
 	}
 
 	return 0;
@@ -313,23 +318,14 @@ static long gsc_subdev_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg
 {
 	struct gsc_dev *gsc = entity_data_to_gsc(v4l2_get_subdevdata(sd));
 	struct gsc_ctx *ctx = gsc->out.ctx;
-	unsigned long flags;
 
 	switch (cmd) {
 	case GSC_SFR_UPDATE:
 		gsc_hw_set_sfr_update(ctx);
-		gsc->wq_cnt++;
 		break;
-
-	case GSC_WAIT_STOP:
-		gsc_wait_stop(gsc);
-		gsc_pm_qos_ctrl(gsc, GSC_QOS_OFF, 0, 0);
-		spin_lock_irqsave(&gsc->slock, flags);
-			clear_bit(ST_OUTPUT_STREAMON, &gsc->state);
-		spin_unlock_irqrestore(&gsc->slock, flags);
-		wake_up(&gsc->irq_queue);
+	case GSC_SET_BUF:
+		gsc_hw_set_input_apply_pending_bit(gsc);
 		break;
-
 	default:
 		gsc_err("unsupported gsc_subdev_ioctl");
 		return -EINVAL;
@@ -464,6 +460,7 @@ static int gsc_output_reqbufs(struct file *file, void *priv,
 			    struct v4l2_requestbuffers *reqbufs)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
+	struct gsc_pipeline *p = &gsc->pipeline;
 	struct gsc_output_device *out = &gsc->out;
 	struct gsc_frame *frame;
 	int ret;
@@ -481,9 +478,14 @@ static int gsc_output_reqbufs(struct file *file, void *priv,
 	frame->cacheable = out->ctx->gsc_ctrls.cacheable->val;
 	gsc->vb2->set_cacheable(gsc->alloc_ctx, frame->cacheable);
 
-	if (reqbufs->count)
-		gsc->q_cnt = gsc->dq_cnt = gsc->isr_cnt = gsc->wq_cnt = 0;
-
+	if (reqbufs->count == 0) {
+		ret = v4l2_subdev_call(p->disp, core, ioctl,
+				S3CFB_FLUSH_WORKQUEUE, NULL);
+		if (ret) {
+			gsc_err("Decon subdev ioctl failed");
+			return ret;
+		}
+	}
 
 	if (gsc->protected_content && reqbufs->count) {
 		int id = gsc->id + 3;
@@ -532,25 +534,22 @@ static int gsc_output_streamon(struct file *file, void *priv,
 		return PTR_ERR(sink_pad);
 	}
 
-	/*
-	 * This is for setting out_path when platform
-	 * missed link_setup function
-	 */
-	gsc->out.ctx->out_path = GSC_FIMD;
+	ret = media_entity_pipeline_start(&out->vfd->entity,
+					gsc->pipeline.pipe);
+	if (ret) {
+		gsc_err("media entity pipeline start fail");
+		return ret;
+	}
 
-	ret = vb2_streamon(&gsc->out.vbq, type);
-
-	return ret;
+	return vb2_streamon(&gsc->out.vbq, type);
 }
 
 static int gsc_output_streamoff(struct file *file, void *priv,
 			    enum v4l2_buf_type type)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
-	int ret = 0;
 
-	ret = vb2_streamoff(&gsc->out.vbq, type);
-	return ret;
+	return vb2_streamoff(&gsc->out.vbq, type);
 }
 
 static int gsc_output_qbuf(struct file *file, void *priv,
@@ -558,38 +557,17 @@ static int gsc_output_qbuf(struct file *file, void *priv,
 {
 	struct gsc_dev *gsc = video_drvdata(file);
 	struct gsc_output_device *out = &gsc->out;
-	int ret;
 
-	ret = vb2_qbuf(&out->vbq, buf);
-	gsc->q_cnt++;
-
-	return ret;
+	return vb2_qbuf(&out->vbq, buf);
 }
 
 static int gsc_output_dqbuf(struct file *file, void *priv,
 			   struct v4l2_buffer *buf)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
-	unsigned long flags;
-	int ret = 0;
 
-	spin_lock_irqsave(&gsc->slock, flags);
-	if (list_empty(&gsc->out.vbq.done_list)) {
-		struct gsc_input_buf *q_buf;
-		if (!list_empty(&gsc->out.active_buf_q)) {
-			q_buf = active_queue_pop(&gsc->out, gsc);
-			vb2_buffer_done(&q_buf->vb, VB2_BUF_STATE_DONE);
-			list_del(&q_buf->list);
-			gsc_info("Done list empty");
-		}
-	}
-	spin_unlock_irqrestore(&gsc->slock, flags);
-
-	ret = vb2_dqbuf(&gsc->out.vbq, buf,
+	return vb2_dqbuf(&gsc->out.vbq, buf,
 			 file->f_flags & O_NONBLOCK);
-	gsc->dq_cnt++;
-
-	return ret;
 }
 
 static int gsc_output_cropcap(struct file *file, void *fh,
@@ -630,7 +608,9 @@ static int gsc_output_s_crop(struct file *file, void *fh, struct v4l2_crop *cr)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
 	struct gsc_ctx *ctx = gsc->out.ctx;
+	struct gsc_variant *variant = gsc->variant;
 	struct gsc_frame *f;
+	unsigned int mask = GSC_DST_FMT | GSC_SRC_FMT | GSC_DST_CROP;
 	int ret;
 
 	if (!is_output(cr->type)) {
@@ -645,6 +625,19 @@ static int gsc_output_s_crop(struct file *file, void *fh, struct v4l2_crop *cr)
 	f = &ctx->s_frame;
 
 	ctx->scaler.is_scaled_down = false;
+	/* Check to see if scaling ratio is within supported range */
+	if ((ctx->state & (GSC_DST_FMT | GSC_SRC_FMT | GSC_DST_CROP)) == mask) {
+		ret = gsc_check_scaler_ratio(ctx, variant,
+				f->crop.width, f->crop.height,
+				ctx->d_frame.crop.width,
+				ctx->d_frame.crop.height,
+				ctx->gsc_ctrls.rotate->val, ctx->out_path);
+		if (ret) {
+			gsc_err("Out of scaler range");
+			return -EINVAL;
+		}
+		gsc_subdev_try_crop(gsc, &ctx->d_frame.crop);
+	}
 
 	f->crop.left = cr->c.left;
 	f->crop.top = cr->c.top;
@@ -678,11 +671,6 @@ static const struct v4l2_ioctl_ops gsc_output_ioctl_ops = {
 
 static int gsc_out_start_streaming(struct vb2_queue *q, unsigned int count)
 {
-	struct gsc_ctx *ctx = q->drv_priv;
-	struct gsc_dev *gsc = ctx->gsc_dev;
-
-	set_bit(DEBUG_STREAMON, &gsc->state);
-
 	return 0;
 }
 
@@ -692,22 +680,18 @@ static int gsc_out_stop_streaming(struct vb2_queue *q)
 	struct gsc_dev *gsc = ctx->gsc_dev;
 	int ret = 0;
 
+	media_entity_pipeline_stop(&gsc->out.vfd->entity);
+
 	ret = wait_event_timeout(gsc->irq_queue,
 		!test_bit(ST_OUTPUT_STREAMON, &gsc->state),
-		msecs_to_jiffies(2000));
-	if (ret == 0)
-		gsc_warn("wait timeout");
-
-	while(!list_empty(&gsc->out.active_buf_q)) {
-		struct gsc_input_buf *done_buf;
-		done_buf = active_queue_pop(&gsc->out, gsc);
-		vb2_buffer_done(&done_buf->vb, VB2_BUF_STATE_ERROR);
-		list_del(&done_buf->list);
+		GSC_SHUTDOWN_TIMEOUT);
+	if (ret == 0) {
+		gsc_err("wait timeout");
+		return -EBUSY;
 	}
 
-	INIT_LIST_HEAD(&gsc->out.active_buf_q);
-
-	clear_bit(DEBUG_STREAMON, &gsc->state);
+	if (!list_empty(&gsc->out.active_buf_q))
+		INIT_LIST_HEAD(&gsc->out.active_buf_q);
 
 	return 0;
 }
@@ -746,8 +730,7 @@ int gsc_out_set_in_addr(struct gsc_dev *gsc, struct gsc_ctx *ctx,
 {
 	int ret;
 
-	ret = gsc_prepare_addr(ctx, &buf->vb, &ctx->s_frame,
-			&ctx->s_frame.addr);
+	ret = gsc_prepare_addr(ctx, &buf->vb, &ctx->s_frame, &ctx->s_frame.addr);
 	if (ret) {
 		gsc_err("Fail to prepare G-Scaler address");
 		return -EINVAL;
@@ -756,9 +739,8 @@ int gsc_out_set_in_addr(struct gsc_dev *gsc, struct gsc_ctx *ctx,
 		gsc_err("source address is null");
 		return -EINVAL;
 	}
-	buf->addr = ctx->s_frame.addr;
+	gsc_hw_set_input_addr(gsc, &ctx->s_frame.addr, index);
 	active_queue_push(&gsc->out, buf, gsc);
-	gsc_hw_set_input_addr_fixed(gsc, &buf->addr);
 	buf->idx = index;
 
 	return 0;
@@ -774,21 +756,11 @@ static void gsc_out_buffer_queue(struct vb2_buffer *vb)
 	unsigned long flags;
 	int ret;
 
+	spin_lock_irqsave(&gsc->slock, flags);
 	if (!test_bit(ST_OUTPUT_STREAMON, &gsc->state) && q->streaming) {
 		gsc_info("Already s_stream(0) is called");
+		spin_unlock_irqrestore(&gsc->slock, flags);
 		return;
-	}
-
-	if (vb->acquire_fence) {
-		ret = sync_fence_wait(vb->acquire_fence, 1000);
-		if (ret == -ETIME) {
-			gsc_warn("sync_fence_wait() timeout");
-			ret = sync_fence_wait(vb->acquire_fence, 10 * MSEC_PER_SEC);
-		}
-		if (ret)
-			gsc_warn("sync_fence_wait() error");
-		sync_fence_put(vb->acquire_fence);
-		vb->acquire_fence = NULL;
 	}
 
 	if (!q->streaming) {
@@ -796,22 +768,28 @@ static void gsc_out_buffer_queue(struct vb2_buffer *vb)
 		ret = gsc_wait_reset(gsc);
 		if (ret < 0) {
 			gsc_err("gscaler s/w reset timeout");
+			spin_unlock_irqrestore(&gsc->slock, flags);
 			return;
 		}
-		gsc_hw_set_input_buf_fixed(gsc);
+		gsc_hw_set_input_buf_mask_all(gsc);
+		gsc->out.pending_mask = 0xf;
+		INIT_LIST_HEAD(&gsc->out.active_buf_q);
 		set_bit(ST_OUTPUT_STREAMON, &gsc->state);
 	}
+	spin_unlock_irqrestore(&gsc->slock, flags);
 
-	spin_lock_irqsave(&gsc->slock, flags);
 	if (gsc->out.req_cnt >= atomic_read(&q->queued_count)) {
+		spin_lock_irqsave(&gsc->mdev[MDEV_OUTPUT]->slock, flags);
 		ret = gsc_out_set_in_addr(gsc, ctx, buf, vb->v4l2_buf.index);
 		if (ret) {
 			gsc_err("Failed to prepare G-Scaler address");
+			spin_unlock_irqrestore(&gsc->mdev[MDEV_OUTPUT]->slock, flags);
 		}
+		gsc_out_set_pp_pending_bit(gsc, vb->v4l2_buf.index, false);
+		spin_unlock_irqrestore(&gsc->mdev[MDEV_OUTPUT]->slock, flags);
 	} else {
 		gsc_err("All requested buffers have been queued already");
 	}
-	spin_unlock_irqrestore(&gsc->slock, flags);
 }
 
 static struct vb2_ops gsc_output_qops = {
@@ -886,10 +864,10 @@ static int gsc_output_open(struct file *file)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
 	int ret = v4l2_fh_open(file);
+	struct exynos_platform_gscaler *pdata = gsc->pdata;
 
 	if (ret)
 		return ret;
-
 	gsc_dbg("pid: %d, state: 0x%lx", task_pid_nr(current), gsc->state);
 	ret = pm_runtime_get_sync(&gsc->pdev->dev);
 	if (ret < 0) {
@@ -897,6 +875,7 @@ static int gsc_output_open(struct file *file)
 		return ret;
 	}
 
+	gsc_pm_qos_ctrl(gsc, GSC_QOS_ON, pdata->mif_min, pdata->int_min);
 	/* Return if the corresponding mem2mem/output/capture video node
 	   is already opened. */
 	if (gsc_m2m_opened(gsc) || gsc_cap_opened(gsc) || gsc_out_opened(gsc)) {
@@ -923,23 +902,15 @@ static int gsc_output_open(struct file *file)
 
 	bts_otf_initialize(gsc->id, true);
 
-	ret = media_entity_pipeline_start(&gsc->out.vfd->entity,
-					gsc->pipeline.pipe);
-	if (ret) {
-		gsc_err("media entity pipeline start fail");
-		return ret;
-	}
-
 	return ret;
 }
 
 static int gsc_output_close(struct file *file)
 {
 	struct gsc_dev *gsc = video_drvdata(file);
-	struct vb2_queue *q = &gsc->out.vbq;
 	int ret = 0;
-
 	gsc_dbg("pid: %d, state: 0x%lx", task_pid_nr(current), gsc->state);
+
 	/* This is unnormal case */
 	if (gsc->protected_content) {
 		int id = gsc->id + 3;
@@ -948,8 +919,18 @@ static int gsc_output_close(struct file *file)
 		gsc_set_protected_content(gsc, false);
 	}
 
-	media_entity_pipeline_stop(&gsc->out.vfd->entity);
 	if (test_bit(ST_OUTPUT_STREAMON, &gsc->state)) {
+		gsc_info("driver is closed by force");
+		ret = v4l2_subdev_call
+			(gsc->mdev[MDEV_OUTPUT]->gsc_sd[gsc->id], video,
+			 s_stream, false);
+		if (ret) {
+			gsc_err("GSC s_stream(0) failed");
+			return ret;
+		}
+	}
+
+	if (gsc->out.req_cnt) {
 		gsc_info("driver is closed by force");
 		gsc_ctx_state_lock_clear(GSC_SRC_FMT | GSC_DST_FMT |
 				GSC_DST_CROP, gsc->out.ctx);
@@ -962,30 +943,27 @@ static int gsc_output_close(struct file *file)
 		}
 	}
 
-	if (q->streaming)
-		gsc_out_stop_streaming(q);
-
 	if (gsc->pipeline.disp != NULL) {
 		gsc_dbg("LINK Disable(%d)", gsc->id);
 		gsc->pipeline.disp = NULL;
 		gsc->out.ctx->out_path = 0;
 	}
 
-	ret = wait_event_timeout(gsc->irq_queue,
-		!test_bit(ST_OUTPUT_STREAMON, &gsc->state),
-		msecs_to_jiffies(1000));
-
-	if (ret == 0)
-		gsc_warn("wait timeout");
-
-	vb2_queue_release(q);
+	clear_bit(ST_OUTPUT_OPEN, &gsc->state);
+	vb2_queue_release(&gsc->out.vbq);
 	gsc_ctrls_delete(gsc->out.ctx);
 	v4l2_fh_release(file);
 
+	gsc_pm_qos_ctrl(gsc, GSC_QOS_OFF, 0, 0);
+	ret = wait_event_timeout(gsc->irq_queue,
+		!test_bit(ST_OUTPUT_STREAMON, &gsc->state),
+		GSC_SHUTDOWN_TIMEOUT);
+	if (ret == 0) {
+		gsc_err("wait timeout");
+		return -EBUSY;
+	}
 	bts_otf_initialize(gsc->id, false);
 	pm_runtime_put_sync(&gsc->pdev->dev);
-
-	clear_bit(ST_OUTPUT_OPEN, &gsc->state);
 
 	return 0;
 }
@@ -1164,7 +1142,6 @@ int gsc_register_output_device(struct gsc_dev *gsc)
 	q->mem_ops = gsc->vb2->ops;
 	q->timestamp_type = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	q->buf_struct_size = sizeof(struct gsc_input_buf);
-	q->name = "gsc-output.queue";
 
 	ret = vb2_queue_init(q);
 	if (ret) {

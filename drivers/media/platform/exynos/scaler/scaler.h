@@ -19,7 +19,6 @@
 #include <linux/videodev2.h>
 #include <linux/videodev2_exynos_media.h>
 #include <linux/io.h>
-#include <linux/pm_qos.h>
 #include <media/videobuf2-core.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-mem2mem.h>
@@ -78,6 +77,7 @@ extern int sc_log_level;
 #define SC_CSC_709	1
 
 #define fh_to_sc_ctx(__fh)	container_of(__fh, struct sc_ctx, fh)
+#define sc_fmt_is_rgb(x)	(!!((x) & 0x10))
 #define sc_fmt_is_yuv422(x)	((x == V4L2_PIX_FMT_YUYV) || \
 		(x == V4L2_PIX_FMT_UYVY) || (x == V4L2_PIX_FMT_YVYU) || \
 		(x == V4L2_PIX_FMT_YUV422P) || (x == V4L2_PIX_FMT_NV16) || \
@@ -90,6 +90,12 @@ extern int sc_log_level;
 #define sc_fmt_is_ayv12(x)	((x) == V4L2_PIX_FMT_YVU420)
 #define sc_dith_val(a, b, c)	((a << SCALER_DITH_R_SHIFT) |	\
 		(b << SCALER_DITH_G_SHIFT) | (c << SCALER_DITH_B_SHIFT))
+
+#if defined(CONFIG_VIDEOBUF2_CMA_PHYS)
+extern const struct sc_vb2 sc_vb2_cma;
+#elif defined(CONFIG_VIDEOBUF2_ION)
+extern const struct sc_vb2 sc_vb2_ion;
+#endif
 
 #ifdef CONFIG_VIDEOBUF2_ION
 #define sc_buf_sync_prepare vb2_ion_buf_prepare
@@ -121,6 +127,11 @@ enum sc_clocks {
 	SC_GATE_CLK,
 	SC_CHLD_CLK,
 	SC_PARN_CLK
+};
+
+enum sc_color_fmt {
+	SC_COLOR_RGB = 0x10,
+	SC_COLOR_YUV = 0x20,
 };
 
 enum sc_dith {
@@ -205,21 +216,24 @@ struct sc_bl_op_val {
  * @min_h: minimum pixel height size
  * @max_w: maximum pixel width size
  * @max_h: maximum pixel height size
+ * @align_w: pixel width align
+ * @align_h: pixel height align
  */
 struct sc_size_limit {
-	u16 min_w;
-	u16 min_h;
-	u16 max_w;
-	u16 max_h;
+	u32 min_w;
+	u32 min_h;
+	u32 max_w;
+	u32 max_h;
+	u32 align_w;
+	u32 align_h;
 };
 
 struct sc_variant {
 	struct sc_size_limit limit_input;
 	struct sc_size_limit limit_output;
-	u32 version;
-	u32 sc_up_max;
-	u32 sc_down_min;
-	u32 sc_down_swmin;
+	int sc_up_max;
+	int sc_down_min;
+	int sc_down_swmin;
 };
 
 /*
@@ -236,13 +250,12 @@ struct sc_variant {
 struct sc_fmt {
 	char	*name;
 	u32	pixelformat;
-	u32	cfg_val;
-	u8	bitperpixel[SC_MAX_PLANES];
-	u8	num_planes:2;
-	u8	num_comp:2;
-	u8	h_shift:1;
-	u8	v_shift:1;
-	u8	is_rgb:1;
+	u8	num_planes;
+	u8	num_comp;
+	u8	h_shift;
+	u8	v_shift;
+	u32	bitperpixel[SC_MAX_PLANES];
+	u32	color;
 };
 
 struct sc_addr {
@@ -262,7 +275,7 @@ struct sc_addr {
  * @bytesused:	image size in bytes (w x h x bpp)
  */
 struct sc_frame {
-	const struct sc_fmt		*sc_fmt;
+	struct sc_fmt			*sc_fmt;
 	unsigned short		width;
 	unsigned short		height;
 	__u32			pixelformat;
@@ -305,12 +318,15 @@ struct sc_csc {
 };
 
 struct sc_ctx;
+struct sc_vb2;
 
 /*
  * struct sc_dev - the abstraction for Rotator device
  * @dev:	pointer to the Rotator device
+ * @pdata:	pointer to the device platform data
  * @variant:	the IP variant information
  * @m2m:	memory-to-memory V4L2 device information
+ * @id:		scaler device index (0..SC_MAX_DEVS)
  * @aclk:	aclk required for scaler operation
  * @pclk:	pclk required for scaler operation
  * @clk_chld:	child clk of mux required for scaler operation
@@ -321,16 +337,19 @@ struct sc_ctx;
  * @ws:		work struct
  * @state:	device state flags
  * @alloc_ctx:	videobuf2 memory allocator context
+ * @sc_vb2:	videobuf2 memory allocator callbacks
  * @slock:	the spinlock pscecting this data structure
  * @lock:	the mutex pscecting this data structure
  * @wdt:	watchdog timer information
- * @version:	IP version number
+ * @clk_cnt:	scalor clock on/off count
  */
 struct sc_dev {
 	struct device			*dev;
-	const struct sc_variant		*variant;
+	struct exynos_platform_sc	*pdata;
+	struct sc_variant		*variant;
 	struct sc_m2m_device		m2m;
-	struct m2m1shot_device		*m21dev;
+	int				id;
+	int				ver;
 	struct clk			*aclk;
 	struct clk			*pclk;
 	struct clk			*clk_chld;
@@ -340,34 +359,23 @@ struct sc_dev {
 	wait_queue_head_t		wait;
 	unsigned long			state;
 	struct vb2_alloc_ctx		*alloc_ctx;
+	const struct sc_vb2		*vb2;
 	spinlock_t			slock;
 	struct mutex			lock;
-	struct workqueue_struct		*fence_wq;
 	struct sc_wdt			wdt;
-	spinlock_t			ctxlist_lock;
-	struct sc_ctx			*current_ctx;
-	struct list_head		context_list; /* for sc_ctx_abs.node */
-	struct pm_qos_request		qosreq_int;
-	s32				qosreq_int_level;
-	u32				version;
-};
-
-enum SC_CONTEXT_TYPE {
-	SC_CTX_V4L2_TYPE,
-	SC_CTX_M2M1SHOT_TYPE
+	atomic_t			clk_cnt;
 };
 
 /*
  * sc_ctx - the abstration for Rotator open context
- * @node:		list to be added to sc_dev.context_list
- * @context_type	determines if the context is @m2m_ctx or @m21_ctx.
  * @sc_dev:		the Rotator device this context applies to
  * @m2m_ctx:		memory-to-memory device context
- * @m21_ctx:		m2m1shot context
  * @frame:		source frame properties
  * @ctrl_handler:	v4l2 controls handler
  * @fh:			v4l2 file handle
- * @ktime:		start time of a task of m2m1shot
+ * @fence_work:		work struct for sync fence work
+ * @fence_wq:		workqueue for sync fence work
+ * @fence_wait_list:	wait list for sync fence
  * @rotation:		image clockwise scation in degrees
  * @flip:		image flip mode
  * @bl_op:		image blend mode
@@ -376,26 +384,22 @@ enum SC_CONTEXT_TYPE {
  * @color_fill:		enable color fill
  * @color:		color fill value
  * @flags:		context state flags
+ * @slock:		spinlock pscecting this data structure
  * @cacheable:		cacheability of current frame
  * @pre_multi:		pre-multiplied format
  * @csc:		csc equation value
  */
 struct sc_ctx {
-	struct list_head		node;
-	enum SC_CONTEXT_TYPE		context_type;
 	struct sc_dev			*sc_dev;
-	union {
-		struct v4l2_m2m_ctx	*m2m_ctx;
-		struct m2m1shot_context	*m21_ctx;
-	};
+	struct v4l2_m2m_ctx		*m2m_ctx;
 	struct sc_frame			s_frame;
 	struct sc_int_frame		*i_frame;
 	struct sc_frame			d_frame;
 	struct v4l2_ctrl_handler	ctrl_handler;
-	union {
-		struct v4l2_fh		fh;
-		ktime_t			ktime_m2m1shot;
-	};
+	struct v4l2_fh			fh;
+	struct work_struct		fence_work;
+	struct workqueue_struct		*fence_wq;
+	struct list_head		fence_wait_list;
 	int				rotation;
 	u32				flip;
 	enum sc_blend_op		bl_op;
@@ -406,9 +410,25 @@ struct sc_ctx {
 	unsigned int			h_ratio;
 	unsigned int			v_ratio;
 	unsigned long			flags;
+	spinlock_t			slock;
 	bool				cacheable;
 	bool				pre_multi;
 	struct sc_csc			csc;
+};
+
+struct sc_vb2 {
+	const struct vb2_mem_ops *ops;
+	void *(*init)(struct sc_dev *sc);
+	void (*cleanup)(void *alloc_ctx);
+
+	unsigned long (*plane_addr)(struct vb2_buffer *vb, u32 plane_no);
+
+	int (*resume)(void *alloc_ctx);
+	void (*suspend)(void *alloc_ctx);
+
+	int (*cache_flush)(struct vb2_buffer *vb, u32 num_planes);
+	void (*set_cacheable)(void *alloc_ctx, bool cacheable);
+	void (*set_sharable)(void *alloc_ctx, bool sharable);
 };
 
 static inline struct sc_frame *ctx_get_frame(struct sc_ctx *ctx,
@@ -430,8 +450,8 @@ static inline struct sc_frame *ctx_get_frame(struct sc_ctx *ctx,
 	return frame;
 }
 
-int sc_hwset_src_image_format(struct sc_dev *sc, const struct sc_fmt *);
-int sc_hwset_dst_image_format(struct sc_dev *sc, const struct sc_fmt *);
+int sc_hwset_src_image_format(struct sc_dev *sc, u32 pixelformat);
+int sc_hwset_dst_image_format(struct sc_dev *sc, u32 pixelformat);
 void sc_hwset_pre_multi_format(struct sc_dev *sc);
 void sc_hwset_blend(struct sc_dev *sc, enum sc_blend_op bl_op, bool pre_multi,
 		unsigned char g_alpha);
@@ -443,23 +463,21 @@ void sc_hwset_flip_rotation(struct sc_dev *sc, u32 direction, int degree);
 void sc_hwset_src_imgsize(struct sc_dev *sc, struct sc_frame *frame);
 void sc_hwset_dst_imgsize(struct sc_dev *sc, struct sc_frame *frame);
 void sc_hwset_src_crop(struct sc_dev *sc, struct v4l2_rect *rect,
-		       const struct sc_fmt *fmt);
+		       struct sc_fmt *fmt);
 void sc_hwset_dst_crop(struct sc_dev *sc, struct v4l2_rect *rect);
 void sc_hwset_src_addr(struct sc_dev *sc, struct sc_addr *addr);
 void sc_hwset_dst_addr(struct sc_dev *sc, struct sc_addr *addr);
 void sc_hwset_hratio(struct sc_dev *sc, u32 ratio);
 void sc_hwset_vratio(struct sc_dev *sc, u32 ratio);
 void sc_hwset_hratio(struct sc_dev *sc, u32 ratio);
-void sc_hwset_hcoef(struct sc_dev *sc, unsigned int coef);
-void sc_hwset_vcoef(struct sc_dev *sc, unsigned int coef);
+void sc_hwset_hcoef(struct sc_dev *sc, int coef);
+void sc_hwset_vcoef(struct sc_dev *sc, int coef);
 void sc_hwset_int_en(struct sc_dev *sc, u32 enable);
 int sc_hwget_int_status(struct sc_dev *sc);
 void sc_hwset_int_clear(struct sc_dev *sc);
 int sc_hwget_version(struct sc_dev *sc);
 void sc_hwset_soft_reset(struct sc_dev *sc);
 void sc_hwset_start(struct sc_dev *sc);
-
-void sc_hwregs_dump(struct sc_dev *sc);
 
 #ifdef CONFIG_VIDEOBUF2_ION
 static inline int sc_get_dma_address(void *cookie, dma_addr_t *addr)

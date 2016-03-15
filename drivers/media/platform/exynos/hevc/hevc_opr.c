@@ -94,9 +94,9 @@ int hevc_alloc_codec_buffers(struct hevc_ctx *ctx)
 		return -EINVAL;
 	}
 
-	ctx->lcu_size = 64;
-	hevc_info("ctx->lcu_size : %d\n", ctx->lcu_size);
+	dec->mv_count = dec->total_dpb_count;
 
+	hevc_info("ctx->lcu_size : %d\n", ctx->lcu_size);
 	lcu_width = ALIGN(ctx->img_width, ctx->lcu_size);
 	lcu_height = ALIGN(ctx->img_height, ctx->lcu_size);
 

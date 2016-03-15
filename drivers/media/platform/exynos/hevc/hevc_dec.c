@@ -176,7 +176,7 @@ static struct v4l2_queryctrl controls[] = {
 		.type = V4L2_CTRL_TYPE_INTEGER,
 		.name = "Display status",
 		.minimum = 0,
-		.maximum = 4,
+		.maximum = 3,
 		.step = 1,
 		.default_value = 0,
 	},
@@ -1226,12 +1226,6 @@ static int vidioc_s_fmt_vid_out_mplane(struct file *file, void *priv,
 		spin_lock_irq(&dev->condlock);
 		set_bit(ctx->num, &dev->ctx_work_bits);
 		spin_unlock_irq(&dev->condlock);
-
-		/* Wait for hw_lock == 0 for this context */
-		wait_event_timeout(ctx->queue,
-				(test_bit(ctx->num, &dev->hw_lock) == 0),
-				msecs_to_jiffies(HEVC_INT_TIMEOUT));
-
 		hevc_try_run(dev);
 		/* Wait until instance is returned or timeout occured */
 		if (hevc_wait_for_done_ctx(ctx,
@@ -1614,8 +1608,6 @@ static int dec_ext_info(struct hevc_ctx *ctx)
 
 	if (FW_HAS_DYNAMIC_DPB(dev))
 		val |= DEC_SET_DYNAMIC_DPB;
-	if (FW_HAS_LAST_DISP_INFO(dev))
-		val |= DEC_SET_LAST_FRAME_INFO;
 
 	return val;
 }

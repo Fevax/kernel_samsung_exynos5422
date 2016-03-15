@@ -76,6 +76,7 @@ int fimc_is_sen_video_probe(void *data)
 		dev_err(&device->pdev->dev, "%s is fail(%d)\n", __func__, ret);
 
 p_err:
+	info("[SS%d:V:X] %s(%d)\n", number, __func__, ret);
 	return ret;
 }
 
@@ -184,6 +185,8 @@ static unsigned int fimc_is_sen_video_poll(struct file *file,
 	struct fimc_is_video_ctx *vctx = file->private_data;
 
 	ret = fimc_is_video_poll(file, vctx, wait);
+	if (ret)
+		merr("fimc_is_video_poll is fail(%d)", vctx, ret);
 
 	return ret;
 }
@@ -422,21 +425,22 @@ static int fimc_is_sen_video_s_input(struct file *file, void *priv,
 	unsigned int input)
 {
 	int ret = 0;
-	u32 scenario;
+	u32 drive;
 	struct fimc_is_video_ctx *vctx = file->private_data;
 	struct fimc_is_device_sensor *device;
 	struct fimc_is_framemgr *framemgr;
 
 	BUG_ON(!vctx);
 
-	mdbgv_sensor("%s(input : %08X)\n", vctx, __func__, input);
+	mdbgv_sensor("%s(input : %d)\n", vctx, __func__, input);
 
 	device = vctx->device;
 	framemgr = GET_DST_FRAMEMGR(vctx);
-	scenario = (input & SENSOR_SCENARIO_MASK) >> SENSOR_SCENARIO_SHIFT;
-	input = (input & SENSOR_MODULE_MASK) >> SENSOR_MODULE_SHIFT;
 
-	ret = fimc_is_sensor_s_input(device, input, scenario);
+	drive = input & SENSOR_DRIVING_MASK;
+	input = input & SENSOR_MODULE_MASK;
+
+	ret = fimc_is_sensor_s_input(device, input, drive);
 	if (ret) {
 		merr("fimc_is_sensor_s_input is fail(%d)", device, ret);
 		goto p_err;
@@ -562,12 +566,8 @@ static int fimc_is_sen_video_s_ctrl(struct file *file, void *priv,
 		}
 		break;
 	default:
-		ret = fimc_is_sensor_s_ctrl(device, ctrl);
-		if (ret) {
-			err("invalid ioctl(0x%08X) is requested", ctrl->id);
-			ret = -EINVAL;
-			goto p_err;
-		}
+		err("unsupported ioctl(%d)\n", ctrl->id);
+		ret = -EINVAL;
 		break;
 	}
 
@@ -580,49 +580,39 @@ static int fimc_is_sen_video_g_ctrl(struct file *file, void *priv,
 {
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
-	struct fimc_is_device_sensor *device;
+	struct fimc_is_device_sensor *sensor;
 
 	BUG_ON(!vctx);
 	BUG_ON(!ctrl);
 
-	device = vctx->device;
-	if (!device) {
-		err("device is NULL");
+	sensor = vctx->device;
+	if (!sensor) {
+		err("sensor is NULL");
 		ret = -EINVAL;
 		goto p_err;
 	}
 
 	switch (ctrl->id) {
 	case V4L2_CID_IS_G_STREAM:
-		if (device->instant_ret)
-			ctrl->value = device->instant_ret;
+		if (sensor->instant_ret)
+			ctrl->value = sensor->instant_ret;
 		else
-			ctrl->value = (test_bit(FIMC_IS_SENSOR_FRONT_START, &device->state) ?
+			ctrl->value = (test_bit(FIMC_IS_SENSOR_FRONT_START, &sensor->state) ?
 				IS_ENABLE_STREAM : IS_DISABLE_STREAM);
 		break;
 	case V4L2_CID_IS_G_BNS_SIZE:
 		{
 			u32 width, height;
 
-			width = fimc_is_sensor_g_bns_width(device);
-			height = fimc_is_sensor_g_bns_height(device);
+			width = fimc_is_sensor_g_bns_width(sensor);
+			height = fimc_is_sensor_g_bns_height(sensor);
 
 			ctrl->value = (width << 16) | height;
 		}
 		break;
-	case V4L2_CID_IS_G_DTPSTATUS:
-		if (test_bit(FIMC_IS_SENSOR_FRONT_DTP_STOP, &device->state))
-			ctrl->value = 1;
-		else
-			ctrl->value = 0;
-		break;
 	default:
-		ret = fimc_is_sensor_g_ctrl(device, ctrl);
-		if (ret) {
-			err("invalid ioctl(0x%08X) is requested", ctrl->id);
-			ret = -EINVAL;
-			goto p_err;
-		}
+		err("unsupported ioctl(%d)\n", ctrl->id);
+		ret = -EINVAL;
 		break;
 	}
 
@@ -634,7 +624,7 @@ static int fimc_is_sen_video_g_parm(struct file *file, void *priv,
 	struct v4l2_streamparm *parm)
 {
 	struct fimc_is_video_ctx *vctx = file->private_data;
-	struct fimc_is_device_sensor *device = vctx->device;
+	struct fimc_is_device_sensor *sensor = vctx->device;
 	struct v4l2_captureparm *cp = &parm->parm.capture;
 	struct v4l2_fract *tfp = &cp->timeperframe;
 
@@ -643,7 +633,7 @@ static int fimc_is_sen_video_g_parm(struct file *file, void *priv,
 
 	cp->capability |= V4L2_CAP_TIMEPERFRAME;
 	tfp->numerator = 1;
-	tfp->denominator = device->image.framerate;
+	tfp->denominator = sensor->image.framerate;
 
 	return 0;
 }

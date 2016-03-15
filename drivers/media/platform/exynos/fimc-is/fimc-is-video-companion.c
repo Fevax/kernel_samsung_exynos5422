@@ -75,49 +75,6 @@ p_err:
 	return ret;
 }
 
-#ifdef CONFIG_OIS_USE
-extern int fimc_is_ois_sine_mode(struct fimc_is_core *core, int mode);
-#endif
-
-static int fimc_is_comp_video_s_ctrl(struct file *file, void *priv,
-	struct v4l2_control *ctrl)
-{
-	int ret = 0;
-	struct fimc_is_video *video;
-	struct fimc_is_device_companion *device;
-
-	dbg_isp("%s\n", __func__);
-
-	video = video_drvdata(file);
-	device = container_of(video, struct fimc_is_device_companion, video);
-
-	if (!device->pdev) {
-		err("pdev is NULL");
-		ret = -EINVAL;
-		goto p_err;
-	}
-
-	switch (ctrl->id) {
-#ifdef CONFIG_OIS_USE
-	case V4L2_CID_CAMERA_OIS_SINE_MODE:
-		if (fimc_is_ois_sine_mode(device->private_data, ctrl->value)) {
-			err("failed to set ois sine mode : %d\n - %d",
-			ctrl->value, ret);
-			ret = -EINVAL;
-		}
-		break;
-#endif
-
-	default:
-		info("unsupported ioctl(%d, sine id = %d)\n", ctrl->id, V4L2_CID_CAMERA_OIS_SINE_MODE);
-		ret = -EINVAL;
-		break;
-	}
-
-p_err:
-	return ret;
-}
-
 /*
  * =============================================================================
  * Video File Opertation
@@ -201,7 +158,6 @@ const struct v4l2_file_operations fimc_is_comp_video_fops = {
  */
 
 const struct v4l2_ioctl_ops fimc_is_comp_video_ioctl_ops = {
-	.vidioc_s_ctrl			= fimc_is_comp_video_s_ctrl,
 };
 
 const struct vb2_ops fimc_is_comp_qops = {

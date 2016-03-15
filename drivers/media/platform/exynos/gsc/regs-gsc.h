@@ -45,9 +45,6 @@
 #define DSD_CFG_MUX			(0x1004)
 #define DSD_RESERVE10			(0x1048)
 
-#define GSCLBLK_CFG0			(0x1010)
-#define GSCLBLK_CFG1			(0x1014)
-
 /* Dynamic clock gating */
 #define GSCL_XIU_TOP_DCG_EN		(0x204)
 #define GSCL_DYN_CLKGATE_DISABLE	(0x500)
@@ -105,13 +102,8 @@
 /* G-Scaler input control */
 #define GSC_IN_CON			0x10
 
-#if defined(CONFIG_SOC_EXYNOS5430)
 #define GSC_IN_IC_MAX_MASK		(7 << 23)
 #define GSC_IN_IC_MAX_MO(x)		(x << 23)
-#else
-#define GSC_IN_IC_MAX_MASK		(3 << 24)
-#define GSC_IN_IC_MAX_MO(x)		(x << 24)
-#endif
 
 #define GSC_IN_CHROM_STRIDE_SEL_MASK	(1 << 20)
 #define GSC_IN_CHROM_STRIDE_SEPAR	(1 << 20)
@@ -149,7 +141,7 @@
 #define GSC_IN_TILE_C_16x16		(1 << 4)
 #define GSC_IN_TILE_MODE		(1 << 3)
 #define GSC_IN_LOCAL_SEL_MASK		(3 << 1)
-#define GSC_IN_LOCAL_WB			(3 << 1)
+#define GSC_IN_LOCAL_CAM3		(3 << 1)
 #define GSC_IN_LOCAL_FIMD_WB		(2 << 1)
 #define GSC_IN_LOCAL_CAM1		(1 << 1)
 #define GSC_IN_LOCAL_CAM0		(0 << 1)
@@ -199,10 +191,10 @@
 #define GSC_OUT_RB_SWAP_MASK		(1 << 12)
 #define GSC_OUT_RB_SWAP			(1 << 12)
 #define GSC_OUT_RGB_TYPE_MASK		(3 << 10)
-#define GSC_OUT_RGB_HD_WIDE		(3 << 10)
-#define GSC_OUT_RGB_HD_NARROW		(2 << 10)
-#define GSC_OUT_RGB_SD_WIDE		(1 << 10)
-#define GSC_OUT_RGB_SD_NARROW		(0 << 10)
+#define GSC_OUT_RGB_HD_NARROW		(3 << 10)
+#define GSC_OUT_RGB_HD_WIDE		(2 << 10)
+#define GSC_OUT_RGB_SD_NARROW		(1 << 10)
+#define GSC_OUT_RGB_SD_WIDE		(0 << 10)
 #define GSC_OUT_YUV422_1P_ORDER_MASK	(1 << 9)
 #define GSC_OUT_YUV422_1P_ORDER_LSB_Y	(0 << 9)
 #define GSC_OUT_YUV422_1P_OEDER_LSB_C	(1 << 9)

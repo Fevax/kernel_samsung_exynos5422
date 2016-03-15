@@ -1,23 +1,44 @@
-/* Copyright (c) 2011 Samsung Electronics Co, Ltd.
+/*
+ * drivers/media/video/exynos/fimc-is-mc2/fimc-is-metadata.h
+ *
+ * Copyright (c) 2011 Samsung Electronics Co., Ltd.
+ *		http://www.samsung.com
+ *
+ * The header file related to camera
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
+ */
 
+/*
+ * Copyright (c) 2012, Samsung Electronics Co. LTD
+ * All rights reserved.
  *
-
- * Alternatively, Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
-
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT(INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and documentation are
+ * those of the authors and should not be interpreted as representing official
+ * policies, either expressed or implied, of the FreeBSD Project.
  */
 
 #ifndef FIMC_IS_METADATA_H_
@@ -43,6 +64,7 @@ struct rational {
 #define CAPTURE_NODE_MAX		2
 #define CAMERA2_MAX_PDAF_MULTIROI_COLUMN 9
 #define CAMERA2_MAX_PDAF_MULTIROI_ROW 5
+
 
 #define OPEN_MAGIC_NUMBER		0x01020304
 #define SHOT_MAGIC_NUMBER		0x23456789
@@ -93,14 +115,8 @@ struct camera2_entry_dm {
 /* android.lens */
 
 enum optical_stabilization_mode {
-	OPTICAL_STABILIZATION_MODE_OFF = 1,
-	OPTICAL_STABILIZATION_MODE_ON = 2,
-	OPTICAL_STABILIZATION_MODE_STILL = 3,  // Still mode
-	OPTICAL_STABILIZATION_MODE_STILL_ZOOM = 4, // Still Zoom mode
-	OPTICAL_STABILIZATION_MODE_VIDEO = 5,  // Recording mode
-	OPTICAL_STABILIZATION_MODE_SINE_X = 6,  // factory mode x
-	OPTICAL_STABILIZATION_MODE_SINE_Y = 7,  // factory mode y
-	OPTICAL_STABILIZATION_MODE_CENTERING = 8 // Centering mode
+	OPTICAL_STABILIZATION_MODE_OFF,
+	OPTICAL_STABILIZATION_MODE_ON
 };
 
 enum lens_facing {
@@ -230,15 +246,6 @@ enum flash_mode {
 	CAM2_FLASH_MODE_BEST
 };
 
-enum capture_state {
-    CAPTURE_STATE_NONE = 0,
-    CAPTURE_STATE_FLASH = 1,
-    CAPTURE_STATE_HDR_DARK = 12,
-    CAPTURE_STATE_HDR_NORMAL = 13,
-    CAPTURE_STATE_HDR_BRIGHT = 14,
-    CAPTURE_STATE_ZSL_LIKE = 20,
-};
-
 struct camera2_flash_ctl {
 	enum flash_mode		flashMode;
 	uint32_t		firingPower;
@@ -360,7 +367,6 @@ enum colorcorrection_mode {
 	COLORCORRECTION_MODE_EFFECT_WARM_VINTAGE,
 	COLORCORRECTION_MODE_EFFECT_COLD_VINTAGE,
 	COLORCORRECTION_MODE_EFFECT_WASHED,
-	COLORCORRECTION_MODE_EFFECT_BEAUTY_FACE,
 	TOTAOCOUNT_COLORCORRECTION_MODE_EFFECT
 };
 
@@ -511,12 +517,10 @@ enum stats_mode {
 };
 
 enum stats_lowlightmode {
-    STATE_LLS_LEVEL_ZSL = 0,
-    STATE_LLS_LEVEL_LOW = 1,
-    STATE_LLS_LEVEL_HIGH = 2,
-    STATE_LLS_LEVEL_SIS = 3,
-    STATE_LLS_LEVEL_ZSL_LIKE = 4,
-    STATE_LLS_LEVEL_ZSL_FLASH = 16,
+    STATE_LLS_NONE = 0,
+    STATE_LLS_LEVEL_LOW,
+    STATE_LLS_LEVEL_HIGH,
+    STATE_LLS_LEVEL_SIS
 };
 
 struct camera2_stats_ctl {
@@ -563,9 +567,7 @@ enum aa_capture_intent {
 	AA_CAPTURE_INTENT_STILL_CAPTURE,
 	AA_CAPTURE_INTENT_VIDEO_RECORD,
 	AA_CAPTURE_INTENT_VIDEO_SNAPSHOT,
-	AA_CAPTURE_INTENT_ZERO_SHUTTER_LAG,
-	AA_CAPTURE_INTENT_STILL_CAPTURE_OIS_SINGLE,
-	AA_CAPTURE_INTENT_STILL_CAPTURE_OIS_MULTI
+	AA_CAPTURE_INTENT_ZERO_SHUTTER_LAG
 };
 
 enum aa_mode {
@@ -630,11 +632,7 @@ enum aa_aemode {
 	AA_AEMODE_CENTER,
 	AA_AEMODE_AVERAGE,
 	AA_AEMODE_MATRIX,
-	AA_AEMODE_SPOT,
-	AA_AEMODE_CENTER_TOUCH,
-	AA_AEMODE_AVERAGE_TOUCH,
-	AA_AEMODE_MATRIX_TOUCH,
-	AA_AEMODE_SPOT_TOUCH
+	AA_AEMODE_SPOT
 };
 
 enum aa_ae_flashmode {
@@ -765,8 +763,6 @@ struct camera2_aa_ctl {
 	uint32_t			afTrigger;
 	enum aa_isomode			isoMode;
 	uint32_t			isoValue;
-	int32_t			awbValue;
-	uint32_t			reserved[10];
 };
 
 struct camera2_aa_dm {
@@ -791,7 +787,6 @@ struct camera2_aa_dm {
 	enum aa_afstate				afState;
 	enum aa_isomode				isoMode;
 	uint32_t				isoValue;
-	uint32_t				reserved[10];
 };
 
 struct camera2_aa_sm {
@@ -1128,7 +1123,6 @@ struct camera2_uctl {
 	/** ispfw specific control(user-defined) of Bcrop1. */
 	struct camera2_bayer_uctl	bayerUd;
 	struct camera2_companion_uctl   companionUd;
-	uint32_t	reserved[10];
 };
 
 struct camera2_udm {
@@ -1143,7 +1137,6 @@ struct camera2_udm {
 	/* Add udm for bayer down size. */
 	struct camera2_bayer_udm	bayer;
 	struct camera2_companion_udm	companion;
-	uint32_t	reserved[10];
 };
 
 struct camera2_shot {

@@ -37,99 +37,6 @@ u32 __iomem *last_fcount1;
 
 extern struct fimc_is_sysfs_debug sysfs_debug;
 
-/* func to register error report callback */
-int fimc_is_set_err_report_vendor(struct fimc_is_interface *itf,
-		void *err_report_data,
-		int (*err_report_vendor)(void *data, u32 err_report_type))
-{
-	if (itf) {
-		itf->err_report_data = err_report_data;
-		itf->err_report_vendor = err_report_vendor;
-	}
-
-	return 0;
-}
-
-/* main func to handle error report */
-static int fimc_is_err_report_handler(struct fimc_is_interface *itf, struct fimc_is_msg *msg)
-{
-	struct fimc_is_device_ischain *device;
-	struct fimc_is_core *core;
-	unsigned long dtp_wait_time;
-
-	core = itf->core;
-	device = &core->ischain[msg->instance];
-	dtp_wait_time = device->sensor->dtp_timer.expires;
-
-	err("IHC_REPORT_ERR(%d,%d,%d,%d,%d) is occured",
-			msg->instance,
-			msg->group,
-			msg->parameter1,
-			msg->parameter2,
-			msg->parameter3);
-
-	/*
-	 * if vendor error report func was registered,
-	 * call the func.
-	 */
-	if (itf->err_report_vendor)
-		itf->err_report_vendor(itf->err_report_data, msg->parameter2);
-
-	switch (msg->parameter2) {
-	case REPORT_ERR_CIS_ID:
-		warn("Occured the ERR_ID");
-		break;
-	case REPORT_ERR_CIS_ECC:
-		warn("Occured the ERR_ECC");
-	case REPORT_ERR_CIS_CRC:
-		warn("Occured the ERR_CRC");
-#ifdef ENABLE_DTP
-		if (dtp_wait_time >= jiffies)
-			set_bit(FIMC_IS_BAD_FRAME_STOP, &device->sensor->force_stop);
-#endif
-		break;
-	case REPORT_ERR_CIS_OVERFLOW_VC0:
-		warn("Occured the OVERFLOW_VC0");
-		break;
-	case REPORT_ERR_CIS_LOST_FE_VC0:
-		warn("Occured the LOST_FE_VC0");
-		break;
-	case REPORT_ERR_CIS_LOST_FS_VC0:
-		warn("Occured the LOST_FS_VC0");
-		break;
-	case REPORT_ERR_CIS_SOT_VC0:
-		warn("Occured the SOT_VC0");
-		break;
-	case REPORT_ERR_CIS_SOT_VC1:
-		warn("Occured the SOT_VC1");
-		break;
-	case REPORT_ERR_CIS_SOT_VC2:
-		warn("Occured the SOT_VC2");
-		break;
-	case REPORT_ERR_CIS_SOT_VC3:
-		warn("Occured the SOT_VC3");
-		break;
-	case REPORT_ERR_3AA_OVERFLOW:
-		warn("Occured the 3AA_OVERFLOW");
-		break;
-	case REPORT_ERR_FLITE_D_OVERFLOW:
-		warn("Occured the FLITE_D_OVERFLOW");
-		break;
-	case REPORT_ERR_COMPANION_LOST_FRAME:
-		warn("Occured the COMPANION_LOST_FRAME");
-		break;
-	case REPORT_ERR_3A_ALGORITHM_DELAYED:
-		warn("Occured the 3A_ALGORITHM_DELAYED");
-		break;
-
-	default:
-		warn("parameter is default");
-		break;
-	}
-
-	return 0;
-}
-
 int print_fre_work_list(struct fimc_is_work_list *this)
 {
 	struct list_head *temp;
@@ -243,36 +150,6 @@ int print_req_work_list(struct fimc_is_work_list *this)
 	}
 
 	printk(KERN_CONT "X\n");
-
-	return 0;
-}
-
-static int print_work_data_state(struct fimc_is_interface *this)
-{
-	struct work_struct *work;
-	unsigned long *bits = NULL;
-
-	work = &this->work_wq[INTR_GENERAL];
-	bits = (work_data_bits(work));
-	info("INTR_GENERAL wq state : (0x%lx)", *bits);
-	work = &this->work_wq[INTR_3A0C_FDONE];
-	bits = (work_data_bits(work));
-	info("INTR_3A0C_FDONE wq state : (0x%lx)", *bits);
-	work = &this->work_wq[INTR_3A1C_FDONE];
-	bits = (work_data_bits(work));
-	info("INTR_3A1C_FDONE wq state : (0x%lx)", *bits);
-	work = &this->work_wq[INTR_SCC_FDONE];
-	bits = (work_data_bits(work));
-	info("INTR_SCC_FDONE wq state : (0x%lx)", *bits);
-	work = &this->work_wq[INTR_DIS_FDONE];
-	bits = (work_data_bits(work));
-	info("INTR_DIS_FDONE wq state : (0x%lx)", *bits);
-	work = &this->work_wq[INTR_SCP_FDONE];
-	bits = (work_data_bits(work));
-	info("INTR_SCP_FDONE wq state : (0x%lx)", *bits);
-	work = &this->work_wq[INTR_SHOT_DONE];
-	bits = (work_data_bits(work));
-	info("INTR_SHOT_DONE wq state : (0x%lx)", *bits);
 
 	return 0;
 }
@@ -595,9 +472,6 @@ static int fimc_is_set_cmd(struct fimc_is_interface *itf,
 	if (ret) {
 		exit_request_barrier(itf);
 		err("%d command is timeout", msg->command);
-		fimc_is_hw_regdump(itf);
-		print_req_work_list(&itf->work_list[INTR_GENERAL]);
-		print_work_data_state(itf);
 		clr_busystate(itf, msg->command);
 		ret = -ETIME;
 		goto exit;
@@ -730,8 +604,6 @@ static int fimc_is_set_cmd_nblk(struct fimc_is_interface *this,
 	switch (msg->command) {
 	case HIC_SET_CAM_CONTROL:
 		set_req_work(&this->nblk_cam_ctrl, work);
-		break;
-	case HIC_MSG_TEST:
 		break;
 	default:
 		err("unresolved command\n");
@@ -1118,7 +990,7 @@ static void wq_func_general(struct work_struct *data)
 #if (FW_HAS_REPORT_ERR_CMD)
 		case IHC_REPORT_ERR:
 			err("IHC_REPORT_ERR is occured");
-			fimc_is_err_report_handler(itf, msg);
+			fimc_is_hw_logdump(itf);
 			break;
 #endif
 		default:
@@ -1210,13 +1082,12 @@ static void wq_func_subdev(struct fimc_is_subdev *leader,
 		}
 
 		findex = sub_frame->stream->findex;
-		if (findex >= ldr_vctx->q_src->buf_maxcount) {
+		if (findex >= ldr_vctx->q_src.buf_maxcount) {
 			err("findex(%d) is invalid(max : %d)",
-				findex, ldr_vctx->q_src->buf_maxcount);
+				findex, ldr_vctx->q_src.buf_maxcount);
 			sub_frame->stream->fvalid = 0;
 			goto done;
 		}
-
 		ldr_frame = &ldr_framemgr->frame[findex];
 		if (status) {
 			info("[%c:D:%d] FRM%d NOT DONE(%d)\n", name,
@@ -1546,6 +1417,7 @@ static void wq_func_group_3a0(struct fimc_is_groupmgr *groupmgr,
 	fimc_is_group_done(groupmgr, group, ldr_frame, done_state);
 	queue_done(vctx, src_queue, ldr_frame->index, done_state);
 }
+
 
 static void wq_func_group_3a1(struct fimc_is_groupmgr *groupmgr,
 	struct fimc_is_group *group,
@@ -2051,8 +1923,9 @@ static inline void wq_func_schedule(struct fimc_is_interface *itf,
 static void interface_timer(unsigned long data)
 {
 	u32 shot_count, scount_3ax, scount_isp;
-	u32 fcount, i;
+	u32 fcount, i, j;
 	unsigned long flags;
+	void __iomem *regs;
 	struct fimc_is_interface *itf = (struct fimc_is_interface *)data;
 	struct fimc_is_core *core;
 	struct fimc_is_device_ischain *device;
@@ -2094,7 +1967,7 @@ static void interface_timer(unsigned long data)
 			}
 			spin_unlock_irq(&itf->shot_check_lock);
 
-			if (test_bit(FIMC_IS_GROUP_READY, &device->group_3aa.state)) {
+			if (test_bit(FIMC_IS_GROUP_ACTIVE, &device->group_3aa.state)) {
 				framemgr = GET_GROUP_FRAMEMGR(&device->group_3aa);
 				framemgr_e_barrier_irqs(framemgr, 0, flags);
 				scount_3ax = framemgr->frame_pro_cnt;
@@ -2102,7 +1975,7 @@ static void interface_timer(unsigned long data)
 				framemgr_x_barrier_irqr(framemgr, 0, flags);
 			}
 
-			if (test_bit(FIMC_IS_GROUP_READY, &device->group_isp.state)) {
+			if (test_bit(FIMC_IS_GROUP_ACTIVE, &device->group_isp.state)) {
 				framemgr = GET_GROUP_FRAMEMGR(&device->group_isp);
 				framemgr_e_barrier_irqs(framemgr, 0, flags);
 				scount_isp = framemgr->frame_pro_cnt;
@@ -2110,7 +1983,7 @@ static void interface_timer(unsigned long data)
 				framemgr_x_barrier_irqr(framemgr, 0, flags);
 			}
 
-			if (test_bit(FIMC_IS_GROUP_READY, &device->group_dis.state)) {
+			if (test_bit(FIMC_IS_GROUP_ACTIVE, &device->group_dis.state)) {
 				framemgr = GET_GROUP_FRAMEMGR(&device->group_dis);
 				framemgr_e_barrier_irqs(framemgr, 0, flags);
 				shot_count += framemgr->frame_pro_cnt;
@@ -2154,14 +2027,21 @@ static void interface_timer(unsigned long data)
 				atomic_set(&itf->shot_check[i], 0);
 				atomic_set(&itf->shot_timeout[i], 0);
 			} else {
+				pr_err("\n### firmware messsage dump ###\n");
 				fimc_is_hw_logdump(itf);
-				fimc_is_hw_regdump(itf);
+
+				pr_err("\n### MCUCTL dump ###\n");
+				regs = itf->com_regs;
+				for (j = 0; j < 64; ++j)
+					pr_err("MCTL[%d] : %08X\n", j, readl(regs + (4 * j)));
 
 				if (itf->need_iflag &&
 					readl(&itf->com_regs->shot_iflag)) {
 					pr_err("\n### MCUCTL check ###\n");
 					fimc_is_clr_intr(itf, INTR_SHOT_DONE);
-					fimc_is_hw_regdump(itf);
+
+					for (j = 0; j < 64; ++j)
+						pr_err("MCTL[%d] : %08X\n", j, readl(regs + (4 * j)));
 				}
 #ifdef BUG_ON_ENABLE
 				BUG();
@@ -2187,27 +2067,18 @@ static void interface_timer(unsigned long data)
 			atomic_set(&itf->sensor_check[i], fcount);
 		}
 
-		if (atomic_read(&itf->sensor_timeout[i]) > SENSOR_TIMEOUT_COUNT) {
+		if (atomic_read(&itf->sensor_timeout[i]) > TRY_TIMEOUT_COUNT) {
 			merr("sensor is timeout(%d, %d)", sensor,
 				atomic_read(&itf->sensor_timeout[i]),
 				atomic_read(&itf->sensor_check[i]));
 
-			/* print sensor clk , pwr state */
-			CALL_POPS(core, print_clk, device->pdev);
-			CALL_POPS(core, print_pwr, device->pdev);
-
-			/* print sensor info */
-			merr("sensor fcount : %d , framerate : %d\n", sensor,
-				fimc_is_sensor_g_fcount(sensor),
-				fimc_is_sensor_g_framerate(sensor));
-			merr("sensor w: %d , h: %d, bns_w: %d, bns_h: %d\n", sensor,
-				fimc_is_sensor_g_width(sensor),
-				fimc_is_sensor_g_height(sensor),
-				fimc_is_sensor_g_bns_width(sensor),
-				fimc_is_sensor_g_bns_height(sensor));
-
+			pr_err("\n### firmware messsage dump ###\n");
 			fimc_is_hw_logdump(itf);
-			fimc_is_hw_regdump(itf);
+
+			pr_err("\n### MCUCTL dump ###\n");
+			regs = itf->com_regs;
+			for (j = 0; j < 64; ++j)
+				pr_err("MCTL[%d] : %08X\n", j, readl(regs + (4 * j)));
 #ifdef BUG_ON_ENABLE
 			BUG();
 #endif
@@ -2215,7 +2086,8 @@ static void interface_timer(unsigned long data)
 		}
 	}
 
-	mod_timer(&itf->timer, jiffies + (FIMC_IS_COMMAND_TIMEOUT/TRY_TIMEOUT_COUNT));
+	mod_timer(&itf->timer, jiffies +
+		(FIMC_IS_COMMAND_TIMEOUT/TRY_TIMEOUT_COUNT));
 }
 
 static irqreturn_t interface_isr(int irq, void *data)
@@ -2415,7 +2287,6 @@ int fimc_is_interface_probe(struct fimc_is_interface *this,
 	clear_bit(IS_IF_STATE_OPEN, &this->state);
 	clear_bit(IS_IF_STATE_START, &this->state);
 	clear_bit(IS_IF_STATE_BUSY, &this->state);
-	clear_bit(IS_IF_STATE_READY, &this->state);
 
 	init_work_list(&this->nblk_cam_ctrl,
 		TRACE_WORK_ID_CAMCTRL, MAX_NBLOCKING_COUNT);
@@ -2434,7 +2305,6 @@ int fimc_is_interface_probe(struct fimc_is_interface *this,
 	init_work_list(&this->work_list[INTR_SHOT_DONE],
 		TRACE_WORK_ID_SHOT, MAX_WORK_COUNT);
 
-	this->err_report_vendor = NULL;
 #ifdef MEASURE_TIME
 #ifdef INTERFACE_TIME
 	{
@@ -2473,7 +2343,6 @@ int fimc_is_interface_open(struct fimc_is_interface *this)
 	atomic_set(&this->lock_pid, 0);
 	clear_bit(IS_IF_STATE_START, &this->state);
 	clear_bit(IS_IF_STATE_BUSY, &this->state);
-	clear_bit(IS_IF_STATE_READY, &this->state);
 
 	init_timer(&this->timer);
 	this->timer.expires = jiffies +
@@ -2551,12 +2420,9 @@ int fimc_is_hw_logdump(struct fimc_is_interface *this)
 	struct fimc_is_core *core;
 
 	if (!test_bit(IS_IF_STATE_OPEN, &this->state)) {
-		warn("interface is closed");
-		count = -EINVAL;
-		goto p_err;
+		err("interface is closed");
+		return 0;
 	}
-
-	pr_err("\n### firmware messsage dump ###\n");
 
 	core = (struct fimc_is_core *)this->core;
 	sentence_i = 0;
@@ -2600,50 +2466,16 @@ int fimc_is_hw_logdump(struct fimc_is_interface *this)
 		printk(KERN_ERR "end\n");
 	}
 
-p_err:
 	return count;
-}
-
-int fimc_is_hw_regdump(struct fimc_is_interface *this)
-{
-	int ret = 0;
-	u32 i;
-	void __iomem *regs;
-
-	if (!test_bit(IS_IF_STATE_OPEN, &this->state)) {
-		warn("interface is closed");
-		ret = -EINVAL;
-		goto p_err;
-	}
-
-	info("\n### MCUCTL Raw Dump ###\n");
-	regs = (this->regs);
-	for (i = 0; i < 16; ++i)
-		info("MCTL Raw[%d] : %08X\n", i, readl(regs + (4 * i)));
-
-	info("\n### COMMON REGS dump ###\n");
-	regs = this->com_regs;
-	for (i = 0; i < 64; ++i)
-		info("MCTL[%d] : %08X\n", i, readl(regs + (4 * i)));
-
-p_err:
-	return ret;
 }
 
 int fimc_is_hw_memdump(struct fimc_is_interface *this,
 	u32 start,
 	u32 end)
 {
-	int ret = 0;
 	u32 *cur;
 	u32 items, offset;
 	char term[50], sentence[250];
-
-	if (!test_bit(IS_IF_STATE_OPEN, &this->state)) {
-		warn("interface is closed");
-		ret = -EINVAL;
-		goto p_err;
-	}
 
 	cur = (u32 *)start;
 	items = 0;
@@ -2668,33 +2500,7 @@ int fimc_is_hw_memdump(struct fimc_is_interface *this,
 		items++;
 	}
 
-	ret = (u32)cur - end;
-
-p_err:
-	return ret;
-}
-
-int fimc_is_hw_msg_test(struct fimc_is_interface *this, u32 sync_id, u32 msg_test_id)
-{
-	int ret = 0;
-	struct fimc_is_work work;
-	struct fimc_is_msg *msg;
-
-	dbg_interface("msg_test_nblk(%d)\n", msg_test_id);
-
-	msg = &work.msg;
-	msg->id = 0;
-	msg->command = HIC_MSG_TEST;
-	msg->instance = 0;
-	msg->group = 0;
-	msg->parameter1 = msg_test_id;
-	msg->parameter2 = sync_id;
-	msg->parameter3 = 0;
-	msg->parameter4 = 0;
-
-	ret = fimc_is_set_cmd_nblk(this, &work);
-
-	return ret;
+	return (u32)cur - end;
 }
 
 int fimc_is_hw_enum(struct fimc_is_interface *this)
@@ -2704,10 +2510,6 @@ int fimc_is_hw_enum(struct fimc_is_interface *this)
 	volatile struct is_common_reg __iomem *com_regs;
 
 	dbg_interface("enum()\n");
-
-	/* check if hw_enum is already operated */
-	if (test_bit(IS_IF_STATE_READY, &this->state))
-	    goto exit;
 
 	ret = wait_initstate(this);
 	if (ret) {
@@ -2738,8 +2540,6 @@ int fimc_is_hw_enum(struct fimc_is_interface *this)
 	writel(msg.parameter3, &com_regs->hic_param3);
 	writel(msg.parameter4, &com_regs->hic_param4);
 	send_interrupt(this);
-
-	set_bit(IS_IF_STATE_READY, &this->state);
 
 exit:
 	return ret;

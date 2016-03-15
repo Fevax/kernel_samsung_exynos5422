@@ -111,12 +111,7 @@ struct fimc_is_fmt fimc_is_formats[] = {
 		.name		= "BAYER 16 bit",
 		.pixelformat	= V4L2_PIX_FMT_SBGGR16,
 		.num_planes	= 1 + SPARE_PLANE,
-	}, {
-		.name		= "JPEG",
-		.pixelformat	= V4L2_PIX_FMT_JPEG,
-		.num_planes	= 1 + SPARE_PLANE,
-		.mbus_code	= V4L2_MBUS_FMT_JPEG_1X8,
-	}
+	},
 };
 
 struct fimc_is_fmt *fimc_is_find_format(u32 *pixelformat,
@@ -170,12 +165,6 @@ void fimc_is_set_plane_size(struct fimc_is_frame_cfg *frame, unsigned int sizes[
 		sizes[0] = width[0]*frame->height*2;
 		sizes[1] = SPARE_SIZE;
 		break;
-	case V4L2_PIX_FMT_NV12:
-		dbg("V4L2_PIX_FMT_NV12(w:%d)(h:%d)\n",
-				frame->width, frame->height);
-		sizes[0] = width[0] * frame->height * 3 / 2;
-		sizes[1] = SPARE_SIZE;
-		break;
 	case V4L2_PIX_FMT_NV12M:
 		dbg("V4L2_PIX_FMT_NV12M(w:%d)(h:%d)\n",
 				frame->width, frame->height);
@@ -183,14 +172,9 @@ void fimc_is_set_plane_size(struct fimc_is_frame_cfg *frame, unsigned int sizes[
 		sizes[1] = width[1]*frame->height/2;
 		sizes[2] = SPARE_SIZE;
 		break;
+	case V4L2_PIX_FMT_NV21M:
 	case V4L2_PIX_FMT_NV21:
 		dbg("V4L2_PIX_FMT_NV21(w:%d)(h:%d)\n",
-				frame->width, frame->height);
-		sizes[0] = width[0] * frame->height * 3 / 2;
-		sizes[1] = SPARE_SIZE;
-		break;
-	case V4L2_PIX_FMT_NV21M:
-		dbg("V4L2_PIX_FMT_NV21M(w:%d)(h:%d)\n",
 				frame->width, frame->height);
 		sizes[0] = width[0]*frame->height;
 		sizes[1] = width[1]*frame->height/2;
@@ -213,7 +197,7 @@ void fimc_is_set_plane_size(struct fimc_is_frame_cfg *frame, unsigned int sizes[
 	case V4L2_PIX_FMT_SBGGR10:
 		dbg("V4L2_PIX_FMT_SBGGR10(w:%d)(h:%d)\n",
 				frame->width, frame->height);
-		sizes[0] = get_plane_size_flite(frame->width,frame->height);
+		sizes[0] = frame->width*frame->height*2;
 		if (frame->bytesperline[0]) {
 			if (frame->bytesperline[0] >= frame->width * 5 / 4) {
 			sizes[0] = frame->bytesperline[0]
@@ -313,7 +297,7 @@ static int queue_init(void *priv, struct vb2_queue *vbq_src,
 			err("vb2_queue_init fail");
 			goto p_err;
 		}
-		vctx->q_src->vbq = vbq_src;
+		vctx->q_src.vbq = vbq_src;
 	} else if (vctx->type == FIMC_IS_VIDEO_TYPE_CAPTURE) {
 		BUG_ON(!vbq_dst);
 
@@ -330,7 +314,7 @@ static int queue_init(void *priv, struct vb2_queue *vbq_src,
 			err("vb2_queue_init fail");
 			goto p_err;
 		}
-		vctx->q_dst->vbq = vbq_dst;
+		vctx->q_dst.vbq = vbq_dst;
 	} else if (vctx->type == FIMC_IS_VIDEO_TYPE_M2M) {
 		BUG_ON(!vbq_src);
 		BUG_ON(!vbq_dst);
@@ -348,7 +332,7 @@ static int queue_init(void *priv, struct vb2_queue *vbq_src,
 			err("vb2_queue_init fail");
 			goto p_err;
 		}
-		vctx->q_src->vbq = vbq_src;
+		vctx->q_src.vbq = vbq_src;
 
 		vbq_dst->type		= V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		vbq_dst->io_modes	= VB2_MMAP | VB2_USERPTR | VB2_DMABUF;
@@ -363,7 +347,7 @@ static int queue_init(void *priv, struct vb2_queue *vbq_src,
 			err("vb2_queue_init fail");
 			goto p_err;
 		}
-		vctx->q_dst->vbq = vbq_dst;
+		vctx->q_dst.vbq = vbq_dst;
 	} else {
 		merr("video type is invalid(%d)", vctx, vctx->type);
 		ret = -EINVAL;
@@ -379,8 +363,6 @@ int open_vctx(struct file *file,
 	u32 id_src, u32 id_dst)
 {
 	int ret = 0;
-	struct fimc_is_queue *q_src = NULL;
-	struct fimc_is_queue *q_dst = NULL;
 
 	BUG_ON(!file);
 	BUG_ON(!video);
@@ -399,30 +381,9 @@ int open_vctx(struct file *file,
 		goto exit;
 	}
 
-	q_src = kzalloc(sizeof(struct fimc_is_queue), GFP_KERNEL);
-	if (q_src == NULL) {
-		err("kzalloc is fail(q_src)");
-		ret = -ENOMEM;
-		kfree(*vctx);
-		*vctx = NULL;
-		goto exit;
-	}
-
-	q_dst = kzalloc(sizeof(struct fimc_is_queue), GFP_KERNEL);
-	if (q_dst == NULL) {
-		err("kzalloc is fail(q_dst)");
-		ret = -ENOMEM;
-		kfree(*vctx);
-		kfree(q_src);
-		*vctx = NULL;
-		goto exit;
-	}
-
 	(*vctx)->instance = vref_get(video);
-	(*vctx)->q_src = q_src;
-	(*vctx)->q_dst = q_dst;
-	(*vctx)->q_src->id = id_src;
-	(*vctx)->q_dst->id = id_dst;
+	(*vctx)->q_src.id = id_src;
+	(*vctx)->q_dst.id = id_dst;
 
 	file->private_data = *vctx;
 
@@ -436,8 +397,6 @@ int close_vctx(struct file *file,
 {
 	int ret = 0;
 
-	kfree(vctx->q_src);
-	kfree(vctx->q_dst);
 	kfree(vctx);
 	file->private_data = NULL;
 	ret = vref_put(video, NULL);
@@ -463,7 +422,6 @@ static int fimc_is_queue_open(struct fimc_is_queue *queue,
 	clear_bit(FIMC_IS_QUEUE_BUFFER_READY, &queue->state);
 	clear_bit(FIMC_IS_QUEUE_STREAM_ON, &queue->state);
 	memset(&queue->framecfg, 0, sizeof(struct fimc_is_frame_cfg));
-	fimc_is_frame_probe(&queue->framemgr, queue->id);
 
 	return ret;
 }
@@ -563,13 +521,21 @@ int fimc_is_queue_buffer_queue(struct fimc_is_queue *queue,
 
 	BUG_ON(framemgr->id == FRAMEMGR_ID_INVALID);
 
-	for (i = 0; i < vb->num_planes; i++)
-		queue->buf_dva[index][i] = vb2->plane_addr(vb, i);
+	/* plane address is updated for checking everytime */
+	if (queue->framecfg.format.pixelformat == V4L2_PIX_FMT_YVU420M) {
+		queue->buf_dva[index][0] = vb2->plane_addr(vb, 0);
+		queue->buf_dva[index][1] = vb2->plane_addr(vb, 2);
+		queue->buf_dva[index][2] = vb2->plane_addr(vb, 1);
+		queue->buf_dva[index][3] = vb2->plane_addr(vb, 3);
+	} else {
+		for (i = 0; i < vb->num_planes; i++)
+			queue->buf_dva[index][i] = vb2->plane_addr(vb, i);
+	}
 
 	frame = &framemgr->frame[index];
 
 	/* uninitialized frame need to get info */
-	if (!test_bit(FRAME_INI_MEM, &frame->memory))
+	if (frame->memory == FRAME_UNI_MEM)
 		goto set_info;
 
 	/* plane count check */
@@ -608,12 +574,14 @@ set_info:
 	for (i = 0; i < frame->planes; i++) {
 		frame->dvaddr_buffer[i] = queue->buf_dva[index][i];
 #ifdef PRINT_BUFADDR
-		info("%04X %d.%d %08X\n", framemgr->id, index, i, frame->dvaddr_buffer[i]);
+		pr_info("%04X %d.%d %08X\n", framemgr->id,
+			index, i, frame->dvaddr_buffer[i]);
 #endif
 	}
 
 	if (framemgr->id & FRAMEMGR_ID_SHOT) {
-		ext_size = sizeof(struct camera2_shot_ext) - sizeof(struct camera2_shot);
+		ext_size = sizeof(struct camera2_shot_ext) -
+			sizeof(struct camera2_shot);
 
 		/* Create Kvaddr for Metadata */
 		queue->buf_kva[index][spare] = vb2->plane_kvaddr(vb, spare);
@@ -627,7 +595,8 @@ set_info:
 		frame->kvaddr_shot = queue->buf_kva[index][spare] + ext_size;
 		frame->cookie_shot = (u32)vb2_plane_cookie(vb, spare);
 		frame->shot = (struct camera2_shot *)frame->kvaddr_shot;
-		frame->shot_ext = (struct camera2_shot_ext *)queue->buf_kva[index][spare];
+		frame->shot_ext = (struct camera2_shot_ext *)
+			queue->buf_kva[index][spare];
 		frame->shot_size = queue->framecfg.size[spare] - ext_size;
 #ifdef MEASURE_TIME
 		frame->tzone = (struct timeval *)frame->shot_ext->timeZone;
@@ -641,12 +610,13 @@ set_info:
 			goto exit;
 		}
 
-		frame->stream = (struct camera2_stream *)queue->buf_kva[index][spare];
+		frame->stream = (struct camera2_stream *)
+			queue->buf_kva[index][spare];
 		frame->stream->address = queue->buf_kva[index][spare];
 		frame->stream_size = queue->framecfg.size[spare];
 	}
 
-	set_bit(FRAME_INI_MEM, &frame->memory);
+	frame->memory = FRAME_INI_MEM;
 
 	queue->buf_refcount++;
 
@@ -779,7 +749,6 @@ int fimc_is_video_probe(struct fimc_is_video *video,
 	const struct v4l2_ioctl_ops *ioctl_ops)
 {
 	int ret = 0;
-	u32 video_id;
 
 	vref_init(video);
 	mutex_init(&video->lock);
@@ -798,7 +767,6 @@ int fimc_is_video_probe(struct fimc_is_video *video,
 	video->vd.lock		= lock;
 	video_set_drvdata(&video->vd, video);
 
-	video_id = EXYNOS_VIDEONODE_FIMC_IS + video_number;
 	ret = video_register_device(&video->vd,
 		VFL_TYPE_GRABBER,
 		(EXYNOS_VIDEONODE_FIMC_IS + video_number));
@@ -808,7 +776,6 @@ int fimc_is_video_probe(struct fimc_is_video *video,
 	}
 
 p_err:
-	info("[VID] %s(%d) is created\n", video_name, video_id);
 	return ret;
 }
 
@@ -828,8 +795,8 @@ int fimc_is_video_open(struct fimc_is_video_ctx *vctx,
 	BUG_ON(!video->vb2);
 	BUG_ON(!vb2_ops);
 
-	q_src = vctx->q_src;
-	q_dst = vctx->q_dst;
+	q_src = &vctx->q_src;
+	q_dst = &vctx->q_dst;
 	q_src->vbq = NULL;
 	q_dst->vbq = NULL;
 	q_src->qops = src_qops;
@@ -847,16 +814,9 @@ int fimc_is_video_open(struct fimc_is_video_ctx *vctx,
 		fimc_is_queue_open(q_src, buf_rdycount);
 
 		q_src->vbq = kzalloc(sizeof(struct vb2_queue), GFP_KERNEL);
-		if (!q_src->vbq) {
-			err("kzalloc is fail");
-			ret = -ENOMEM;
-			goto p_err;
-		}
-
 		ret = queue_init(vctx, q_src->vbq, NULL);
 		if (ret) {
 			err("queue_init fail");
-			kfree(q_src->vbq);
 			goto p_err;
 		}
 		break;
@@ -864,16 +824,9 @@ int fimc_is_video_open(struct fimc_is_video_ctx *vctx,
 		fimc_is_queue_open(q_dst, buf_rdycount);
 
 		q_dst->vbq = kzalloc(sizeof(struct vb2_queue), GFP_KERNEL);
-		if (!q_dst->vbq) {
-			err("kzalloc is fail");
-			ret = -ENOMEM;
-			goto p_err;
-		}
-
 		ret = queue_init(vctx, NULL, q_dst->vbq);
 		if (ret) {
 			err("queue_init fail");
-			kfree(q_dst->vbq);
 			goto p_err;
 		}
 		break;
@@ -882,25 +835,10 @@ int fimc_is_video_open(struct fimc_is_video_ctx *vctx,
 		fimc_is_queue_open(q_dst, buf_rdycount);
 
 		q_src->vbq = kzalloc(sizeof(struct vb2_queue), GFP_KERNEL);
-		if (!q_src->vbq) {
-			err("kzalloc is fail");
-			ret = -ENOMEM;
-			goto p_err;
-		}
-
 		q_dst->vbq = kzalloc(sizeof(struct vb2_queue), GFP_KERNEL);
-		if (!q_dst->vbq) {
-			err("kzalloc is fail");
-			kfree(q_src->vbq);
-			ret = -ENOMEM;
-			goto p_err;
-		}
-
 		ret = queue_init(vctx, q_src->vbq, q_dst->vbq);
 		if (ret) {
 			err("queue_init fail");
-			kfree(q_src->vbq);
-			kfree(q_dst->vbq);
 			goto p_err;
 		}
 		break;
@@ -917,15 +855,13 @@ p_err:
 int fimc_is_video_close(struct fimc_is_video_ctx *vctx)
 {
 	int ret = 0;
-	u32 video_type;
+	u32 video_type = vctx->type;
 	struct fimc_is_queue *q_src, *q_dst;
 
 	BUG_ON(!vctx);
 
-	video_type = vctx->type;
-
-	q_src = vctx->q_src;
-	q_dst = vctx->q_dst;
+	q_src = &vctx->q_src;
+	q_dst = &vctx->q_dst;
 
 	switch (video_type) {
 	case FIMC_IS_VIDEO_TYPE_OUTPUT:
@@ -974,10 +910,10 @@ u32 fimc_is_video_poll(struct file *file,
 
 	switch (video_type) {
 	case FIMC_IS_VIDEO_TYPE_OUTPUT:
-		ret = vb2_poll(vctx->q_src->vbq, file, wait);
+		ret = vb2_poll(vctx->q_src.vbq, file, wait);
 		break;
 	case FIMC_IS_VIDEO_TYPE_CAPTURE:
-		ret = vb2_poll(vctx->q_dst->vbq, file, wait);
+		ret = vb2_poll(vctx->q_dst.vbq, file, wait);
 		break;
 	case FIMC_IS_VIDEO_TYPE_M2M:
 		merr("video poll is not supported", vctx);
@@ -1000,10 +936,10 @@ int fimc_is_video_mmap(struct file *file,
 
 	switch (video_type) {
 	case FIMC_IS_VIDEO_TYPE_OUTPUT:
-		ret = vb2_mmap(vctx->q_src->vbq, vma);
+		ret = vb2_mmap(vctx->q_src.vbq, vma);
 		break;
 	case FIMC_IS_VIDEO_TYPE_CAPTURE:
-		ret = vb2_mmap(vctx->q_dst->vbq, vma);
+		ret = vb2_mmap(vctx->q_dst.vbq, vma);
 		break;
 	case FIMC_IS_VIDEO_TYPE_M2M:
 		merr("video mmap is not supported", vctx);
@@ -1060,9 +996,9 @@ int fimc_is_video_reqbufs(struct file *file,
 
 		if (!queue->buf_rdycount)
 			set_bit(FIMC_IS_QUEUE_BUFFER_READY, &queue->state);
-
-		fimc_is_frame_open(framemgr, queue->buf_maxcount);
 	}
+
+	fimc_is_frame_open(framemgr, queue->id, queue->buf_maxcount);
 
 p_err:
 	return ret;
@@ -1211,8 +1147,7 @@ int fimc_is_video_dqbuf(struct file *file,
 	framemgr_x_barrier_irq(framemgr, 0);
 
 	if (qcount <= 0) {
-		/* HACK : this log is commented until timeout issue fixed */
-		/* merr("dqbuf can not be executed without qbuf(%d)", vctx, qcount); */
+		merr("dqbuf can not be executed without qbuf(%d)", vctx, qcount);
 		ret = -EINVAL;
 		goto p_err;
 	}
