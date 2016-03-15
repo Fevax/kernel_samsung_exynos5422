@@ -35,8 +35,6 @@
 #include <mach/regs-clock-exynos5422.h>
 #elif defined(CONFIG_SOC_EXYNOS5430)
 #include <mach/regs-clock-exynos5430.h>
-#elif defined(CONFIG_SOC_EXYNOS5433)
-#include <mach/regs-clock-exynos5433.h>
 #endif
 
 struct platform_device; /* don't need the contents */
@@ -49,6 +47,89 @@ int exynos_fimc_is_print_cfg(struct platform_device *pdev, u32 channel)
 	pr_debug("%s\n", __func__);
 
 	return 0;
+}
+
+/* utility function to set parent with names */
+int fimc_is_set_parent(const char *child, const char *parent)
+{
+	struct clk *p;
+	struct clk *c;
+
+	p = __clk_lookup(parent);
+	if (IS_ERR(p)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, parent);
+		return -EINVAL;
+	}
+
+	c = __clk_lookup(child);
+	if (IS_ERR(c)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, child);
+		return -EINVAL;
+	}
+
+	return clk_set_parent(c, p);
+}
+
+/* utility function to get parent name with name */
+struct clk *fimc_is_get_parent(const char *child)
+{
+	struct clk *c;
+
+	c = __clk_lookup(child);
+	if (IS_ERR(c)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, child);
+		return NULL;
+	}
+
+	return clk_get_parent(c);
+}
+
+/* utility function to set rate with name */
+int fimc_is_set_rate(const char *conid, unsigned int rate)
+{
+	struct clk *target;
+
+	target = __clk_lookup(conid);
+	if (IS_ERR(target)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, conid);
+		return -EINVAL;
+	}
+
+	return clk_set_rate(target, rate);
+}
+
+/* utility function to get rate with name */
+unsigned int  fimc_is_get_rate(const char *conid)
+{
+	struct clk *target;
+	unsigned int rate_target;
+
+	target = __clk_lookup(conid);
+	if (IS_ERR(target)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, conid);
+		return -EINVAL;
+	}
+
+	rate_target = clk_get_rate(target);
+	pr_debug("%s : %d\n", conid, rate_target);
+
+	return rate_target;
+}
+
+/* utility function to eable with name */
+unsigned int  fimc_is_enable(const char *conid)
+{
+	struct clk *target;
+
+	target = __clk_lookup(conid);
+	if (IS_ERR(target)) {
+		pr_err("%s: could not lookup clock : %s\n", __func__, conid);
+		return -EINVAL;
+	}
+
+	clk_prepare(target);
+
+	return clk_enable(target);
 }
 
 /* utility function to set parent with DT */
@@ -425,7 +506,6 @@ int exynos5422_fimc_is_clk_on(struct platform_device *pdev)
 
 	fimc_is_enable_dt(pdev, "sclk_uart_isp");
 	fimc_is_enable_dt(pdev, "sclk_pwm_isp");
-	fimc_is_enable_dt(pdev, "sclk_spi0_isp");
 
 	fimc_is_enable_dt(pdev, "clk_3aa");
 	fimc_is_enable_dt(pdev, "clk_camif_top_3aa");
@@ -442,7 +522,6 @@ int exynos5422_fimc_is_clk_off(struct platform_device *pdev)
 	exynos5422_cfg_clk_div_max(pdev);
 	fimc_is_disable_dt(pdev, "sclk_uart_isp");
 	fimc_is_disable_dt(pdev, "sclk_pwm_isp");
-	fimc_is_disable_dt(pdev, "sclk_spi0_isp");
 
 	fimc_is_disable_dt(pdev, "clk_3aa");
 	fimc_is_disable_dt(pdev, "clk_camif_top_3aa");
@@ -517,7 +596,7 @@ int exynos5422_fimc_is_set_user_clk_gate(u32 group_id,
 
 	return ret;
 }
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 int exynos5430_fimc_is_clk_gate(u32 clk_gate_id, bool is_on)
 {
 	int cfg = 0;
@@ -600,26 +679,6 @@ int exynos5430_fimc_is_clk_gate(u32 clk_gate_id, bool is_on)
 	return 0;
 }
 
-static int exynos5430_cfg_clk_isp_pll_on(struct platform_device *pdev)
-{
-	pr_info("%s\n", __func__);
-
-	fimc_is_enable_dt(pdev, "fout_isp_pll");
-	fimc_is_set_parent_dt(pdev, "mout_isp_pll", "fout_isp_pll");
-
-	return 0;
-}
-
-static int exynos5430_cfg_clk_isp_pll_off(struct platform_device *pdev)
-{
-	pr_info("%s\n", __func__);
-
-	fimc_is_set_parent_dt(pdev, "mout_isp_pll", "fin_pll");
-	fimc_is_disable_dt(pdev, "fout_isp_pll");
-
-	return 0;
-}
-
 int exynos5430_cfg_clk_div_max(struct platform_device *pdev)
 {
 	/* SCLK */
@@ -627,11 +686,13 @@ int exynos5430_cfg_clk_div_max(struct platform_device *pdev)
 	/* SCLK_SPI0 */
 	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_spi0", "oscclk");
 	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_spi0_a", 1);
+	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_spi0_b", 1);
 	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_spi0_user", "oscclk");
 
 	/* SCLK_SPI1 */
 	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_spi1", "oscclk");
 	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_spi1_a", 1);
+	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_spi1_b", 1);
 	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_spi1_user", "oscclk");
 #endif
 
@@ -640,10 +701,69 @@ int exynos5430_cfg_clk_div_max(struct platform_device *pdev)
 	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_uart", 1);
 	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_uart_user", "oscclk");
 
+	/* CAM0 */
+	/* USER_MUX_SEL */
+	fimc_is_set_parent_dt(pdev, "mout_aclk_cam0_552_user", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_aclk_cam0_400_user", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_aclk_cam0_333_user", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_phyclk_rxbyteclkhs0_s4", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_phyclk_rxbyteclkhs0_s2a", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_phyclk_rxbyteclkhs0_s2b", "oscclk");
+	/* LITE A */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_lite_a", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_lite_a", 1);
+	/* LITE B */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_lite_b", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_lite_b", 1);
+	/* LITE D */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_lite_d", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_lite_d", 1);
+	/* LITE C PIXELASYNC */
+	fimc_is_set_rate_dt(pdev, "dout_sclk_pixelasync_lite_c_init", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_pixelasync_lite_c", 1);
+	fimc_is_set_rate_dt(pdev, "dout_sclk_pixelasync_lite_c", 1);
+	/* 3AA 0 */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_3aa0", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_3aa0", 1);
+	/* 3AA 0 */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_3aa1", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_3aa1", 1);
+	/* CSI 0 */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_csis0", 1);
+	/* CSI 1 */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_csis1", 1);
+	/* CAM0 400 */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_cam0_400", 1);
+	fimc_is_set_rate_dt(pdev, "dout_aclk_cam0_200", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_cam0_50", 1);
+
 	/* CAM1 */
+	/* USER_MUX_SEL */
+	fimc_is_set_parent_dt(pdev, "mout_aclk_cam1_552_user", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_aclk_cam1_400_user", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_aclk_cam1_333_user", "oscclk");
 	/* C-A5 */
 	fimc_is_set_rate_dt(pdev, "dout_atclk_cam1", 1);
 	fimc_is_set_rate_dt(pdev, "dout_pclk_dbg_cam1", 1);
+	/* LITE A */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_lite_c", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_lite_c", 1);
+	/* FD */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_fd", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_fd", 1);
+	/* CSI 2 */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_csis2_a", 1);
+
+	/* CMU_ISP */
+	/* USER_MUX_SEL */
+	fimc_is_set_parent_dt(pdev, "mout_aclk_isp_400_user", "oscclk");
+	fimc_is_set_parent_dt(pdev, "mout_aclk_isp_dis_400_user", "oscclk");
+	/* ISP */
+	fimc_is_set_rate_dt(pdev, "dout_aclk_isp_c_200", 1);
+	fimc_is_set_rate_dt(pdev, "dout_aclk_isp_d_200", 1);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_isp", 1);
+	/* DIS */
+	fimc_is_set_rate_dt(pdev, "dout_pclk_isp_dis", 1);
 
 	return 0;
 }
@@ -663,6 +783,11 @@ int exynos5430_cfg_clk_sclk(struct platform_device *pdev)
 	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_spi1_a", 275 * 1000000);
 	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_spi1_b", 46 * 1000000);
 	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_spi1_user", "sclk_isp_spi1_top");
+
+	/* SCLK_UART */
+	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_uart", "mout_bus_pll_user");
+	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_uart", 207 * 1000000);
+	fimc_is_set_parent_dt(pdev, "mout_sclk_isp_uart_user", "sclk_isp_uart_top");
 
 	return 0;
 }
@@ -765,24 +890,9 @@ int exynos5430_cfg_clk_cam1(struct platform_device *pdev)
 	fimc_is_set_rate_dt(pdev, "dout_aclk_csis2_a", 333 * 1000000);
 
 	/* MPWM */
-	fimc_is_set_rate_dt(pdev, "dout_pclk_cam1_166", 167 * 1000000);
-	fimc_is_set_rate_dt(pdev, "dout_pclk_cam1_83", 84 * 1000000);
-	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_mpwm", 84 * 1000000);
-
-	/* CAM1 QE CLK GATE */
-	fimc_is_enable_dt(pdev, "gate_bts_fd");
-	fimc_is_disable_dt(pdev, "gate_bts_fd");
-
-	return 0;
-}
-
-int exynos5430_cfg_clk_cam1_spi(struct platform_device *pdev)
-{
-	/* USER_MUX_SEL */
-	fimc_is_set_parent_dt(pdev, "mout_aclk_cam1_333_user", "aclk_cam1_333");
-
-	/* SPI */
-	fimc_is_set_rate_dt(pdev, "dout_pclk_cam1_83", 84 * 1000000);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_cam1_166", 166 * 1000000);
+	fimc_is_set_rate_dt(pdev, "dout_pclk_cam1_83", 83 * 1000000);
+	fimc_is_set_rate_dt(pdev, "dout_sclk_isp_mpwm", 83 * 1000000);
 
 	return 0;
 }
@@ -800,18 +910,6 @@ int exynos5430_cfg_clk_isp(struct platform_device *pdev)
 	/* DIS */
 	fimc_is_set_rate_dt(pdev, "dout_pclk_isp_dis", 207 * 1000000);
 
-	/* ISP QE CLK GATE */
-	fimc_is_enable_dt(pdev, "gate_bts_3dnr");
-	fimc_is_enable_dt(pdev, "gate_bts_dis1");
-	fimc_is_enable_dt(pdev, "gate_bts_dis0");
-	fimc_is_enable_dt(pdev, "gate_bts_scalerc");
-	fimc_is_enable_dt(pdev, "gate_bts_drc");
-	fimc_is_disable_dt(pdev, "gate_bts_3dnr");
-	fimc_is_disable_dt(pdev, "gate_bts_dis1");
-	fimc_is_disable_dt(pdev, "gate_bts_dis0");
-	fimc_is_disable_dt(pdev, "gate_bts_scalerc");
-	fimc_is_disable_dt(pdev, "gate_bts_drc");
-
 	return 0;
 }
 
@@ -819,7 +917,6 @@ int exynos5430_fimc_is_cfg_clk(struct platform_device *pdev)
 {
 	pr_debug("%s\n", __func__);
 
-	exynos5430_cfg_clk_isp_pll_on(pdev);
 	exynos5430_cfg_clk_div_max(pdev);
 
 	/* initialize Clocks */
@@ -876,9 +973,6 @@ int exynos5430_fimc_is_clk_on(struct platform_device *pdev)
 int exynos5430_fimc_is_clk_off(struct platform_device *pdev)
 {
 	pr_debug("%s\n", __func__);
-
-	exynos5430_cfg_clk_div_max(pdev);
-	exynos5430_cfg_clk_isp_pll_off(pdev);
 
 	return 0;
 }
@@ -975,7 +1069,6 @@ int exynos5430_fimc_is_print_clk(struct platform_device *pdev)
 	pr_info("EXYNOS5430_DIV_TOP0(0x%08X)\n", readl(EXYNOS5430_DIV_TOP0));
 	pr_info("EXYNOS5430_DIV_TOP_CAM10(0x%08X)\n", readl(EXYNOS5430_DIV_TOP_CAM10));
 	pr_info("EXYNOS5430_DIV_TOP_CAM11(0x%08X)\n", readl(EXYNOS5430_DIV_TOP_CAM11));
-	pr_info("EXYNOS5430_ENABLE_SCLK_TOP_CAM1(0x%08X)\n", readl(EXYNOS5430_ENABLE_SCLK_TOP_CAM1));
 	pr_info("EXYNOS5430_ENABLE_IP_TOP(0x%08X)\n", readl(EXYNOS5430_ENABLE_IP_TOP));
 	/* CMU_CAM0_DUMP */
 	pr_info("EXYNOS5430_SRC_SEL_CAM00(0x%08X)\n", readl(EXYNOS5430_SRC_SEL_CAM00));
@@ -1021,7 +1114,6 @@ int exynos5430_fimc_is_print_clk(struct platform_device *pdev)
 	pr_info("EXYNOS5430_DIV_CAM11(0x%08X)\n", readl(EXYNOS5430_DIV_CAM11));
 	pr_info("EXYNOS5430_DIV_STAT_CAM10(0x%08X)\n", readl(EXYNOS5430_DIV_STAT_CAM10));
 	pr_info("EXYNOS5430_DIV_STAT_CAM11(0x%08X)\n", readl(EXYNOS5430_DIV_STAT_CAM11));
-	pr_info("EXYNOS5430_ENABLE_SCLK_CAM1(0x%08X)\n", readl(EXYNOS5430_ENABLE_SCLK_CAM1));
 	pr_info("EXYNOS5430_ENABLE_IP_CAM10(0x%08X)\n", readl(EXYNOS5430_ENABLE_IP_CAM10));
 	pr_info("EXYNOS5430_ENABLE_IP_CAM11(0x%08X)\n", readl(EXYNOS5430_ENABLE_IP_CAM11));
 	pr_info("EXYNOS5430_ENABLE_IP_CAM12(0x%08X)\n", readl(EXYNOS5430_ENABLE_IP_CAM12));
@@ -1131,7 +1223,7 @@ int exynos_fimc_is_cfg_clk(struct platform_device *pdev)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_cfg_clk(pdev);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_cfg_clk(pdev);
 #endif
 	return 0;
@@ -1142,9 +1234,9 @@ int exynos_fimc_is_cfg_cam_clk(struct platform_device *pdev)
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_cfg_clk_sclk(pdev);
 	exynos5422_cfg_clk_cam(pdev);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_cfg_clk_sclk(pdev);
-	exynos5430_cfg_clk_cam1_spi(pdev);
+	exynos5430_cfg_clk_cam1(pdev);
 #endif
 	return 0;
 }
@@ -1153,7 +1245,7 @@ int exynos_fimc_is_clk_on(struct platform_device *pdev)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_clk_on(pdev);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_clk_on(pdev);
 #endif
 	return 0;
@@ -1163,7 +1255,7 @@ int exynos_fimc_is_clk_off(struct platform_device *pdev)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_clk_off(pdev);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_clk_off(pdev);
 #endif
 	return 0;
@@ -1173,7 +1265,7 @@ int exynos_fimc_is_print_clk(struct platform_device *pdev)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_print_clk(pdev);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_print_clk(pdev);
 #endif
 	return 0;
@@ -1186,7 +1278,7 @@ int exynos_fimc_is_set_user_clk_gate(u32 group_id, bool is_on,
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_set_user_clk_gate(group_id, is_on, user_scenario_id, msk_state, gate_info);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_set_user_clk_gate(group_id, is_on, user_scenario_id, msk_state, gate_info);
 #endif
 	return 0;
@@ -1196,7 +1288,7 @@ int exynos_fimc_is_clk_gate(u32 clk_gate_id, bool is_on)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_clk_gate(clk_gate_id, is_on);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_clk_gate(clk_gate_id, is_on);
 #endif
 	return 0;
@@ -1206,7 +1298,7 @@ int exynos_fimc_is_sensor_power_on(struct platform_device *pdev, int sensor_id)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_sensor_power_on(pdev, sensor_id);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_sensor_power_on(pdev, sensor_id);
 #endif
 	return 0;
@@ -1216,7 +1308,7 @@ int exynos_fimc_is_sensor_power_off(struct platform_device *pdev, int sensor_id)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_sensor_power_off(pdev, sensor_id);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_sensor_power_off(pdev, sensor_id);
 #endif
 	return 0;
@@ -1226,8 +1318,9 @@ int exynos_fimc_is_print_pwr(struct platform_device *pdev)
 {
 #if defined(CONFIG_SOC_EXYNOS5422)
 	exynos5422_fimc_is_print_pwr(pdev);
-#elif defined(CONFIG_SOC_EXYNOS5430) || defined(CONFIG_SOC_EXYNOS5433)
+#elif defined(CONFIG_SOC_EXYNOS5430)
 	exynos5430_fimc_is_print_pwr(pdev);
 #endif
 	return 0;
 }
+
